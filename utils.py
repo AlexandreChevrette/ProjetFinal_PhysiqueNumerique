@@ -48,9 +48,8 @@ class Sol:
     def placerElectrode(self, posX, posY, courant):
         self.electrodeList = np.append(self.electrodeList, Electrode(posX,posY,courant))
 
-    # @numba.jit
     def calculerPotentiel(self):      
-        # voir sources, ai-je vraiment besoin de mettre le potentiel à 0 aux bords?
+        # voir sources
 
         it=0
         tol = 1e-8
