@@ -4,53 +4,87 @@ import numba
 
 
 @numba.njit(fastmath=True, parallel=True)
-def __accelerateurCalculPotentiel__(V, V_k, Sigma, I, h):
+def rb_gauss_seidel(
+    V,
+    sigma_ifhs, sigma_ibhs,
+    sigma_jfhs, sigma_jbhs,
+    sigma_deno,
+    I,
+    h
+):
 
     ny, nx = V.shape
     h2 = h * h
-    error = 0.0
 
-    # valeurs frontières
-    for i in numba.prange(nx):
+    # =========================
+    # Boundaries (no prange)
+    # =========================
+    for i in range(nx):
         V[0, i] = 0.0
         V[ny-1, i] = V[ny-2, i]
 
-    for j in numba.prange(ny):
+    for j in range(ny):
         V[j, 0] = V[j, 1]
         V[j, nx-1] = V[j, nx-2]
 
-    # calculs
+
+    # =========================
+    # 🔴 RED PASS
+    # =========================
+    err_red = 0.0
+
     for j in numba.prange(1, ny-1):
-        for i in numba.prange(1, nx-1):
+        tmp = 0.0
+        start_i = 1 + (j % 2)
 
-            s = Sigma[j, i]
+        for i in range(start_i, nx-1, 2):
 
-            sip = Sigma[j, i+1]
-            sim = Sigma[j, i-1]
-            sjp = Sigma[j+1, i]
-            sjm = Sigma[j-1, i]
-
-            sigma_ifhs = 2.0 * s * sip / (s + sip)
-            sigma_ibhs = 2.0 * s * sim / (s + sim)
-            sigma_jfhs = 2.0 * s * sjp / (s + sjp)
-            sigma_jbhs = 2.0 * s * sjm / (s + sjm)
-
-            deno = sigma_ifhs + sigma_ibhs + sigma_jfhs + sigma_jbhs
+            v_old = V[j, i]
 
             new_val = (
                 I[j, i] * h2
-                + sigma_ifhs * V_k[j, i+1]
-                + sigma_ibhs * V_k[j, i-1]
-                + sigma_jfhs * V_k[j+1, i]
-                + sigma_jbhs * V_k[j-1, i]
-            ) / deno
+                + sigma_ifhs[j, i] * V[j, i+1]
+                + sigma_ibhs[j, i] * V[j, i-1]
+                + sigma_jfhs[j, i] * V[j+1, i]
+                + sigma_jbhs[j, i] * V[j-1, i]
+            ) / sigma_deno[j, i]
 
             V[j, i] = new_val
 
-            d = new_val - V_k[j, i]
-            error += d * d
+            d = new_val - v_old
+            tmp += d * d
 
-    return np.sqrt(error)
+        err_red += tmp
+
+    # =========================
+    # ⚫ BLACK PASS
+    # =========================
+    err_black = 0.0
+
+    for j in numba.prange(1, ny-1):
+        tmp = 0.0
+        start_i = 1 + ((j + 1) % 2)
+
+        for i in range(start_i, nx-1, 2):
+
+            v_old = V[j, i]
+
+            new_val = (
+                I[j, i] * h2
+                + sigma_ifhs[j, i] * V[j, i+1]
+                + sigma_ibhs[j, i] * V[j, i-1]
+                + sigma_jfhs[j, i] * V[j+1, i]
+                + sigma_jbhs[j, i] * V[j-1, i]
+            ) / sigma_deno[j, i]
+
+            V[j, i] = new_val
+
+            d = new_val - v_old
+            tmp += d * d
+
+        err_black += tmp
+
+    return np.sqrt(err_red + err_black)
 
 
 class Sol:
@@ -60,6 +94,11 @@ class Sol:
         self.nx = nxy[0]
         self.ny = nxy[1]
         self.matriceSigma = np.zeros((self.ny,self.nx))
+        self.sigma_ifhs = np.zeros((self.ny,self.nx)) 
+        self.sigma_ibhs = np.zeros((self.ny,self.nx))
+        self.sigma_jfhs = np.zeros((self.ny,self.nx))
+        self.sigma_jbhs = np.zeros((self.ny,self.nx))
+        self.sigma_deno = np.zeros((self.ny,self.nx))
         self.matricePotentiel = np.zeros((self.ny,self.nx)) 
         self.matriceCourant = np.zeros((self.ny,self.nx)) 
         self.__genererSigma__()
@@ -76,6 +115,29 @@ class Sol:
         xx, yy = np.meshgrid(np.arange(self.ny), np.arange(self.nx), indexing='ij')
 
         self.matriceSigma[(xx-90)**2 + (yy-50)**2 <= 5**2] = 1/1000
+
+        # center
+        s = self.matriceSigma[1:-1, 1:-1]
+
+        # neighbors
+        sip = self.matriceSigma[1:-1, 2:]   # i+1
+        sim = self.matriceSigma[1:-1, :-2]  # i-1
+        sjp = self.matriceSigma[2:, 1:-1]   # j+1
+        sjm = self.matriceSigma[:-2, 1:-1]  # j-1
+
+        # harmonic means
+        self.sigma_ifhs[1:-1, 1:-1] = 2.0 * s * sip / (s + sip)
+        self.sigma_ibhs[1:-1, 1:-1] = 2.0 * s * sim / (s + sim)
+        self.sigma_jfhs[1:-1, 1:-1] = 2.0 * s * sjp / (s + sjp)
+        self.sigma_jbhs[1:-1, 1:-1] = 2.0 * s * sjm / (s + sjm)
+
+        # denominator
+        self.sigma_deno = (
+            self.sigma_ifhs
+            + self.sigma_ibhs
+            + self.sigma_jfhs
+            + self.sigma_jbhs
+        )
     
     def __genererCourant__(self):
         for electrode in self.electrodeList:
@@ -110,7 +172,7 @@ class Sol:
         # voir sources
 
         it=0
-        tol = 1e-8
+        tol = 1e-6
 
         ### C'est quoi h??
         h = 1
@@ -120,15 +182,16 @@ class Sol:
         niter= 1000000
         V = self.matricePotentiel #reference
         self.__genererCourant__()
-        I = self.matriceCourant.copy() #copie
-        Sigma = self.matriceSigma.copy() #copie
+        I = self.matriceCourant.copy()
+        sigma_ifhs = self.sigma_ifhs.copy()
+        sigma_ibhs = self.sigma_ibhs.copy()
+        sigma_jfhs = self.sigma_jfhs.copy()
+        sigma_jbhs = self.sigma_jbhs.copy()
+        sigma_deno = self.sigma_deno.copy()
 
-        V_k = np.zeros_like(V)
         while erreur > tol and it < niter:
 
-            erreur = __accelerateurCalculPotentiel__(V, V_k, Sigma, I, h)
-
-            V, V_k = V_k, V   # swap instead of copy
+            erreur = rb_gauss_seidel(V, sigma_ifhs,sigma_ibhs,sigma_jfhs,sigma_jbhs,sigma_deno, I, h)
 
             it += 1  
             print(f"Erreur: {erreur}")
