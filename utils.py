@@ -113,12 +113,12 @@ class Sol:
     def __genererSigma__(self):
         # voir les sources et changer le setting de resistivité
         # self.matriceSigma = np.random.uniform(low=1, high=10, size=(self.ny, self.nx))
-        self.matriceSigma = np.ones((self.ny,self.nx))* 1/250
+        self.matriceSigma = np.ones((self.ny,self.nx))* 1/5000
 
         # xx, yy = np.meshgrid(np.arange(self.ny), np.arange(self.nx), indexing='ij')
         # self.matriceSigma[(xx-90)**2 + (yy-50)**2 <= 5**2] = 1/1000
 
-        self.matriceSigma[:90,:] =1/50
+        self.matriceSigma[:90,:] =1/5
         self.matriceSigma[-1,:] = 0
 
         # center
@@ -263,9 +263,9 @@ class Sol:
     def __genererPositionsAB__(self):
         listeA = []
         listeB = []
-        for i in range(2, 20, 2):
-            A = self.nx//2-6 - i
-            B = self.nx//2+6 + i
+        for i in range(0, 40, 1):
+            A = self.nx//2-5 - i
+            B = self.nx//2+5 + i
             listeA.append(A)
             listeB.append(B)
         return list(zip(listeA, listeB))
