@@ -107,15 +107,16 @@ class Sol:
         self.listeResistanceApparente = np.array([])
         self.listeAB2 = np.array([])
         
-
     def __genererSigma__(self):
         # voir les sources et changer le setting de resistivité
         # self.matriceSigma = np.random.uniform(low=1, high=10, size=(self.ny, self.nx))
-        self.matriceSigma = np.ones((self.ny,self.nx))*250
-        xx, yy = np.meshgrid(np.arange(self.ny), np.arange(self.nx), indexing='ij')
+        self.matriceSigma = np.ones((self.ny,self.nx))*1/250
 
+        # xx, yy = np.meshgrid(np.arange(self.ny), np.arange(self.nx), indexing='ij')
         # self.matriceSigma[(xx-90)**2 + (yy-50)**2 <= 5**2] = 1/1000
-        self.matriceSigma[:90,:] = 50
+
+        self.matriceSigma[:90,:] = 1/50
+        self.matriceSigma[-1,:] = 0
 
         # center
         s = self.matriceSigma[1:-1, 1:-1]
@@ -173,7 +174,7 @@ class Sol:
         # voir sources
 
         it=0
-        tol = 1e-6
+        tol = 1e-2
 
         ### C'est quoi h??
         h = 1
@@ -196,7 +197,6 @@ class Sol:
 
             it += 1  
             print(f"Erreur: {erreur}")
-
 
     def calculerResApparente(self, courantInjection):
         if (len(self.electrodeMesuresList) != 2):
@@ -234,13 +234,23 @@ class Sol:
         AB = abs(b - a)
         AB_2 = AB / 2
 
-        r1 = abs(M.posX - a)
-        r2 = abs(M.posX - b)
-        r3 = abs(N.posX - a)
-        r4 = abs(N.posX - b)
+        # r1 = abs(M.posX - a)
+        # r2 = abs(M.posX - b)
+        # r3 = abs(N.posX - a)
+        # r4 = abs(N.posX - b)
 
         # Résistivité apparente
-        rho = 2 * np.pi * dV / courantInjection * ((1/r1-1/r2)-(1/r3-1/r4))
+        # rho = 2 * np.pi * dV / courantInjection * ((1/r1-1/r2)-(1/r3-1/r4))
+        # rho = 2 * np.pi * dV / courantInjection * r1
+
+        AM = abs(M.posX - a)
+        BM = abs(M.posX - b)
+        AN = abs(N.posX - a)
+        BN = abs(N.posX - b)
+
+        # Résistivité apparente (* à la place de diviser)
+        rho = 2 * np.pi * dV / (courantInjection) * ((1/AM-1/AN)-(1/BM-1/BN))
+
 
         return rho, AB_2
         
@@ -259,7 +269,7 @@ class Sol:
         plt.figure()
         # plt.contourf(xx, yy, V_[0], levels=200)
         plt.plot(self.listeAB2, self.listeResistanceApparente)
-        plt.yscale('log')
+        # plt.yscale('log')
         plt.ylabel(r"Résistivité apparente [$\Omega$m]")
         plt.xlabel("Demi-distance entre les électrodes [m]")
         plt.show()
