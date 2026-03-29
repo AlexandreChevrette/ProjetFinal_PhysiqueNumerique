@@ -111,10 +111,11 @@ class Sol:
     def __genererSigma__(self):
         # voir les sources et changer le setting de resistivité
         # self.matriceSigma = np.random.uniform(low=1, high=10, size=(self.ny, self.nx))
-        self.matriceSigma = np.ones((self.ny,self.nx))
+        self.matriceSigma = np.ones((self.ny,self.nx))*250
         xx, yy = np.meshgrid(np.arange(self.ny), np.arange(self.nx), indexing='ij')
 
-        self.matriceSigma[(xx-90)**2 + (yy-50)**2 <= 5**2] = 1/1000
+        # self.matriceSigma[(xx-90)**2 + (yy-50)**2 <= 5**2] = 1/1000
+        self.matriceSigma[:90,:] = 50
 
         # center
         s = self.matriceSigma[1:-1, 1:-1]
@@ -233,15 +234,13 @@ class Sol:
         AB = abs(b - a)
         AB_2 = AB / 2
 
-        # Distance MN
-        MN_dist = abs(M.posX - N.posX)
-        MN_term = (MN_dist / 2)**2
-
-        # Facteur géométrique
-        K = np.pi * ((AB_2**2 - MN_term) / MN_dist)
+        r1 = abs(M.posX - a)
+        r2 = abs(M.posX - b)
+        r3 = abs(N.posX - a)
+        r4 = abs(N.posX - b)
 
         # Résistivité apparente
-        rho = K * dV / courantInjection
+        rho = 2 * np.pi * dV / courantInjection * ((1/r1-1/r2)-(1/r3-1/r4))
 
         return rho, AB_2
         
@@ -249,9 +248,9 @@ class Sol:
     def __genererPositionsAB__(self):
         listeA = []
         listeB = []
-        for i in range(2, self.nx//2, 2):
-            A = self.nx//2 - i
-            B = self.nx//2 + i
+        for i in range(2, self.nx//2-6, 2):
+            A = self.nx//2-6 - i
+            B = self.nx//2+6 + i
             listeA.append(A)
             listeB.append(B)
         return list(zip(listeA, listeB))
