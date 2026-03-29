@@ -12,21 +12,12 @@ def rb_gauss_seidel(
     I,
     h
 ):
+    # formule de poisson généralisée
 
     ny, nx = V.shape
-    h2 = h * h
+    # h2 = h * h  chat me dit de ne pas utiliser h^2 lorsqu'on est en A
 
-    # =========================
-    # Boundaries (no prange)
-    # =========================
-    for i in range(nx):
-        V[0, i] = 0.0
-        V[ny-1, i] = V[ny-2, i]
-
-    for j in range(ny):
-        V[j, 0] = V[j, 1]
-        V[j, nx-1] = V[j, nx-2]
-
+    
 
     # =========================
     # 🔴 RED PASS
@@ -42,7 +33,7 @@ def rb_gauss_seidel(
             v_old = V[j, i]
 
             new_val = (
-                I[j, i] * h2
+                I[j, i]
                 + sigma_ifhs[j, i] * V[j, i+1]
                 + sigma_ibhs[j, i] * V[j, i-1]
                 + sigma_jfhs[j, i] * V[j+1, i]
@@ -70,7 +61,7 @@ def rb_gauss_seidel(
             v_old = V[j, i]
 
             new_val = (
-                I[j, i] * h2
+                I[j, i] 
                 + sigma_ifhs[j, i] * V[j, i+1]
                 + sigma_ibhs[j, i] * V[j, i-1]
                 + sigma_jfhs[j, i] * V[j+1, i]
@@ -83,6 +74,18 @@ def rb_gauss_seidel(
             tmp += d * d
 
         err_black += tmp
+
+    # =========================
+    # Boundaries (no prange)
+    # =========================
+    for i in range(nx):
+        V[0, i] = V[1, i]
+        V[ny-1, i] = 0.0
+
+    for j in range(ny):
+        V[j, 0] = V[j, 1]
+        V[j, nx-1] = V[j, nx-2]
+
 
     return np.sqrt(err_red + err_black)
 
@@ -110,12 +113,12 @@ class Sol:
     def __genererSigma__(self):
         # voir les sources et changer le setting de resistivité
         # self.matriceSigma = np.random.uniform(low=1, high=10, size=(self.ny, self.nx))
-        self.matriceSigma = np.ones((self.ny,self.nx))*1/250
+        self.matriceSigma = np.ones((self.ny,self.nx))* 1/250
 
         # xx, yy = np.meshgrid(np.arange(self.ny), np.arange(self.nx), indexing='ij')
         # self.matriceSigma[(xx-90)**2 + (yy-50)**2 <= 5**2] = 1/1000
 
-        self.matriceSigma[:90,:] = 1/50
+        self.matriceSigma[:90,:] =1/50
         self.matriceSigma[-1,:] = 0
 
         # center
@@ -161,6 +164,12 @@ class Sol:
         plt.colorbar()
         plt.show()
 
+
+    def afficherPotentielImSHOW(self):
+        plt.figure()
+        plt.imshow(self.matricePotentiel, origin='lower')
+        plt.show()
+
     def placerElectrode(self, posX, posY, courant):
         self.electrodeList = np.append(self.electrodeList, Electrode(posX,posY,courant))
 
@@ -196,7 +205,7 @@ class Sol:
             erreur = rb_gauss_seidel(V, sigma_ifhs,sigma_ibhs,sigma_jfhs,sigma_jbhs,sigma_deno, I, h)
 
             it += 1  
-            print(f"Erreur: {erreur}")
+            # print(f"Erreur: {erreur}")
 
     def calculerResApparente(self, courantInjection):
         if (len(self.electrodeMesuresList) != 2):
@@ -205,10 +214,11 @@ class Sol:
         coord_ab = self.__genererPositionsAB__()
         M = self.electrodeMesuresList[0]
         N = self.electrodeMesuresList[1]
-
+        
         listeRho = []
         listeAB2 = []
         for (a, b) in coord_ab:
+
             rho, ab2 = self.__calculerUnAB__(a, b, M, N, courantInjection)
             listeRho.append(rho)
             listeAB2.append(ab2)
@@ -218,39 +228,34 @@ class Sol:
 
 
     def __calculerUnAB__(self, a, b, M, N, courantInjection):
+        self.matriceCourant = np.zeros((self.ny,self.nx))
+        self.matricePotentiel = np.zeros((self.ny,self.nx))
         self.enleverElectrodes()
+
         self.placerElectrode(a, self.ny-2, courantInjection)
         self.placerElectrode(b, self.ny-2, -courantInjection)
         self.__genererCourant__()
-        # Solveur
         self.calculerPotentiel()
-
         
-
-        # Différence de potentiel
+        print(f"Potentiel à M: {self.matricePotentiel[M.posY, M.posX]}")
+        print(f"Potentiel à N: {self.matricePotentiel[N.posY, N.posX]}")
         dV = self.matricePotentiel[M.posY, M.posX] - self.matricePotentiel[N.posY, N.posX]
 
-        # Distance AB
         AB = abs(b - a)
         AB_2 = AB / 2
-
-        # r1 = abs(M.posX - a)
-        # r2 = abs(M.posX - b)
-        # r3 = abs(N.posX - a)
-        # r4 = abs(N.posX - b)
-
-        # Résistivité apparente
-        # rho = 2 * np.pi * dV / courantInjection * ((1/r1-1/r2)-(1/r3-1/r4))
-        # rho = 2 * np.pi * dV / courantInjection * r1
 
         AM = abs(M.posX - a)
         BM = abs(M.posX - b)
         AN = abs(N.posX - a)
         BN = abs(N.posX - b)
 
-        # Résistivité apparente (* à la place de diviser)
-        rho = 2 * np.pi * dV / (courantInjection) * ((1/AM-1/AN)-(1/BM-1/BN))
+        # K = 2 * np.pi/((1/AM-1/AN)-(1/BM-1/BN))
 
+
+        # En 2d, la formule de la résistivité apparente pour un 
+        # montage de Schlumberger est donnée par  selon chatGPT:
+        K_2D = np.pi / np.log((AN * BM) / (AM * BN)) 
+        rho = K_2D * dV / (courantInjection) 
 
         return rho, AB_2
         
@@ -258,7 +263,7 @@ class Sol:
     def __genererPositionsAB__(self):
         listeA = []
         listeB = []
-        for i in range(2, self.nx//2-6, 2):
+        for i in range(2, 20, 2):
             A = self.nx//2-6 - i
             B = self.nx//2+6 + i
             listeA.append(A)
