@@ -10,7 +10,16 @@ sol = Sol((taille,taille),(dim,dim))
 # sol.calculerPotentiel()
 # sol.afficherPotentielImSHOW()
 
-sol.placerElectrodeMesure(46, 98)
-sol.placerElectrodeMesure(54, 98)
-sol.calculerResApparente(1)
-sol.afficherResistanceApparente()
+# sol.placerElectrodeMesure(49, 98)
+# sol.placerElectrodeMesure(51, 98)
+# sol.calculerResApparente(1)
+# sol.afficherResistanceApparente()
+
+sol.calculerPseudoSection(1)
+sol.afficherPseudoSection()
+
+
+## optmisations faites:
+# à chaque itération, je reprend l'ancien potentiel sans le reset
+# la réponse est proche donc il y a moins d'itérations nécessaires pour converger
+# ensuite la méthode de calcul utilise deux quadrillés. ça marche bien avec numba jit

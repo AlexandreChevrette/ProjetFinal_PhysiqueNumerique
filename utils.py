@@ -1,7 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import numba
-
+from scipy.interpolate import griddata
 
 @numba.njit(fastmath=True, parallel=True)
 def rb_gauss_seidel(
@@ -109,16 +109,19 @@ class Sol:
         self.electrodeMesuresList = np.array([])
         self.listeResistanceApparente = np.array([])
         self.listeAB2 = np.array([])
-        
+        self.listeX = np.array([])
+        self.listeZ = np.array([])
+        self.listePseudoSection = np.array([])
+
     def __genererSigma__(self):
         # voir les sources et changer le setting de resistivité
         # self.matriceSigma = np.random.uniform(low=1, high=10, size=(self.ny, self.nx))
         self.matriceSigma = np.ones((self.ny,self.nx))* 1/5000
+        self.matriceSigma[:90,:] =1/50
+        # yy, xx = np.meshgrid(np.arange(self.ny), np.arange(self.nx), indexing='ij')
+        # self.matriceSigma[(yy-90)**2 + (xx-30)**2 <= 5**2] = 1/1000
 
-        # xx, yy = np.meshgrid(np.arange(self.ny), np.arange(self.nx), indexing='ij')
-        # self.matriceSigma[(xx-90)**2 + (yy-50)**2 <= 5**2] = 1/1000
-
-        self.matriceSigma[:90,:] =1/5
+       
         self.matriceSigma[-1,:] = 0
 
         # center
@@ -164,7 +167,6 @@ class Sol:
         plt.colorbar()
         plt.show()
 
-
     def afficherPotentielImSHOW(self):
         plt.figure()
         plt.imshow(self.matricePotentiel, origin='lower')
@@ -179,16 +181,12 @@ class Sol:
     def enleverElectrodes(self):
         self.electrodeList = np.array([])
 
-    def calculerPotentiel(self):      
+    def calculerPotentiel(self):
         # voir sources
 
         it=0
         tol = 1e-2
-
-        ### C'est quoi h??
         h = 1
-
-
         erreur = 1
         niter= 1000000
         V = self.matricePotentiel #reference
@@ -211,25 +209,25 @@ class Sol:
         if (len(self.electrodeMesuresList) != 2):
             print("Seulement deux sondes de mesures doivent être utilisés pour calculer la resistance apparente")
             return
-        coord_ab = self.__genererPositionsAB__()
+        
         M = self.electrodeMesuresList[0]
         N = self.electrodeMesuresList[1]
+        coord_ab = self.__genererPositionsAB__(M, N)
+        
         
         listeRho = []
         listeAB2 = []
         for (a, b) in coord_ab:
-
-            rho, ab2 = self.__calculerUnAB__(a, b, M, N, courantInjection)
+            rho, ab2 = self.__calculerUnAB__(a, b, M.posX, N.posX, courantInjection)
             listeRho.append(rho)
             listeAB2.append(ab2)
 
         self.listeResistanceApparente = np.array(listeRho)
         self.listeAB2 = np.array(listeAB2)
 
-
     def __calculerUnAB__(self, a, b, M, N, courantInjection):
         self.matriceCourant = np.zeros((self.ny,self.nx))
-        self.matricePotentiel = np.zeros((self.ny,self.nx))
+        # self.matricePotentiel = np.zeros((self.ny,self.nx))
         self.enleverElectrodes()
 
         self.placerElectrode(a, self.ny-2, courantInjection)
@@ -237,17 +235,15 @@ class Sol:
         self.__genererCourant__()
         self.calculerPotentiel()
         
-        print(f"Potentiel à M: {self.matricePotentiel[M.posY, M.posX]}")
-        print(f"Potentiel à N: {self.matricePotentiel[N.posY, N.posX]}")
-        dV = self.matricePotentiel[M.posY, M.posX] - self.matricePotentiel[N.posY, N.posX]
+        dV = self.matricePotentiel[98, M] - self.matricePotentiel[98, N]
 
         AB = abs(b - a)
         AB_2 = AB / 2
 
-        AM = abs(M.posX - a)
-        BM = abs(M.posX - b)
-        AN = abs(N.posX - a)
-        BN = abs(N.posX - b)
+        AM = abs(M - a)
+        BM = abs(M - b)
+        AN = abs(N - a)
+        BN = abs(N - b)
 
         # K = 2 * np.pi/((1/AM-1/AN)-(1/BM-1/BN))
 
@@ -259,27 +255,90 @@ class Sol:
 
         return rho, AB_2
         
-
-    def __genererPositionsAB__(self):
+    def __genererPositionsAB__(self, M, N):
         listeA = []
         listeB = []
-        for i in range(0, 40, 1):
-            A = self.nx//2-5 - i
-            B = self.nx//2+5 + i
+        A = M.posX - 1
+        B = N.posX + 1
+        while (A >= 4 and B < self.nx-4):
             listeA.append(A)
             listeB.append(B)
+            A -= 1
+            B += 1
         return list(zip(listeA, listeB))
     
     def afficherResistanceApparente(self):
         plt.figure()
-        # plt.contourf(xx, yy, V_[0], levels=200)
         plt.plot(self.listeAB2, self.listeResistanceApparente)
-        # plt.yscale('log')
         plt.ylabel(r"Résistivité apparente [$\Omega$m]")
         plt.xlabel("Demi-distance entre les électrodes [m]")
         plt.show()
 
+    def calculerPseudoSection(self, courantInjection):
+        coord_abmn = self.__genererPositionsABMN__()
+        
+        listeRho = []
+        listeZ = []
+        listeX = []
+        for (a, b, M, N) in coord_abmn:
+            rho, ab2 = self.__calculerUnAB__(a, b, M, N, courantInjection)
+            listeRho.append(rho)
+            listeZ.append(ab2)
+            listeX.append((M + N) / 2)
+
+        self.listePseudoSection = np.array(listeRho)
+        self.listeZ = np.array(listeZ)
+        self.listeX = np.array(listeX)
+
+    def __genererPositionsABMN__(self):
+        listeA = []
+        listeB = []
+        listeM = []
+        listeN = []
+        pas = 4
+
+        A_ini = 2
+        M_ini = 3
+        N_ini = 5
+        B_ini = 6
+        for i in range((self.nx-B_ini)//(2*pas)):
+            A = A_ini
+            M = M_ini + i*pas
+            N = N_ini + i*pas
+            B = B_ini + 2*i*pas
+            while (B < self.nx): 
+                listeA.append(A)
+                listeB.append(B)
+                listeM.append(M)
+                listeN.append(N)
+                A += pas
+                M += pas 
+                N += pas
+                B += pas
+        return list(zip(listeA, listeB, listeM, listeN))
     
+    def afficherPseudoSection(self):
+        print(self.listeX)
+        print(self.listeZ)
+        print(self.listePseudoSection)
+        xi = np.linspace(self.listeX.min(), self.listeX.max(), 200)
+        zi = np.linspace(self.listeZ.min(), self.listeZ.max(), 200)
+
+        XI, ZI = np.meshgrid(xi, zi)
+
+        # interpolation
+        RHOI = griddata((self.listeX, self.listeZ), self.listePseudoSection, (XI, ZI), method='cubic')
+        plt.figure()
+        contourf = plt.contourf(XI, ZI, RHOI, levels=50)
+        plt.gca().invert_yaxis()  # profondeur vers le bas
+        # points de mesure (optionnel mais pro)
+        plt.scatter(self.listeX, self.listeZ, c='k', s=10)
+        
+        plt.colorbar(contourf, label=r"Résistivité apparente [$\Omega$m]")
+        plt.xlabel("Position X [m]")
+        plt.ylabel("Profondeur Apparente (AB/2) [m]")
+        plt.title("Pseudo-section de résistivité apparente")
+        plt.show()
 
 class Electrode:
     def __init__(self, posX, posY, courant):
