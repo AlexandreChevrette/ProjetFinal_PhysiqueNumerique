@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 import numba
 from scipy.interpolate import griddata
 import pandas as pd
+import os
 
 @numba.njit(fastmath=True, parallel=True)
 def rb_gauss_seidel(
@@ -341,8 +342,26 @@ class Sol:
         plt.title("Pseudo-section de résistivité apparente")
         plt.show()
 
-    def enregistrerData(self):
-        pass
+    def enregistrerData(self, PATH, name):
+        coord_abmn = self.__genererPositionsABMN__()
+        A = [a[0] for a in coord_abmn]
+        B = [b[1] for b in coord_abmn]
+        M = [m[2] for m in coord_abmn]
+        N = [n[3] for n in coord_abmn]
+        data = {
+            'a': A,
+            'b': B,
+            'm': M,
+            'n': N,
+            'rho': self.listePseudoSection,
+            'x': self.listeX,
+            'z': self.listeZ
+        }
+        df = pd.DataFrame(data)
+        df.to_excel(os.path.join(PATH, name), index=False)
+        print(f"Enregistrement effectué à la destination {os.path.join(PATH, name)}")
+
+        
 
 
 class Electrode:

@@ -2,6 +2,8 @@ from utils import *
 
 taille = 100 # 100x100m
 dim = 100
+PATH = r"C:\Users\obour\OneDrive - Université Laval\Bureau"
+
 
 sol = Sol((taille,taille),(dim,dim))
 sol.placerElectrode(46, 98, 1)
@@ -17,6 +19,8 @@ sol.afficherResistanceApparente()
 
 sol.calculerPseudoSection(1)
 sol.afficherPseudoSection()
+
+sol.enregistrerData(PATH, 'test.xlsx')
 
 
 ## optmisations faites:
