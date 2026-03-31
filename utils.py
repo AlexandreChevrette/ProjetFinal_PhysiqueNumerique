@@ -2,6 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import numba
 from scipy.interpolate import griddata
+import pandas as pd
 
 @numba.njit(fastmath=True, parallel=True)
 def rb_gauss_seidel(
@@ -117,9 +118,9 @@ class Sol:
         # voir les sources et changer le setting de resistivité
         # self.matriceSigma = np.random.uniform(low=1, high=10, size=(self.ny, self.nx))
         self.matriceSigma = np.ones((self.ny,self.nx))* 1/5000
-        self.matriceSigma[:90,:] =1/50
-        # yy, xx = np.meshgrid(np.arange(self.ny), np.arange(self.nx), indexing='ij')
-        # self.matriceSigma[(yy-90)**2 + (xx-30)**2 <= 5**2] = 1/1000
+        # self.matriceSigma[:90,:] =1/50
+        yy, xx = np.meshgrid(np.arange(self.ny), np.arange(self.nx), indexing='ij')
+        self.matriceSigma[(yy-90)**2 + (xx-30)**2 <= 5**2] = 1/1000
 
        
         self.matriceSigma[-1,:] = 0
@@ -339,6 +340,10 @@ class Sol:
         plt.ylabel("Profondeur Apparente (AB/2) [m]")
         plt.title("Pseudo-section de résistivité apparente")
         plt.show()
+
+    def enregistrerData(self):
+        pass
+
 
 class Electrode:
     def __init__(self, posX, posY, courant):
