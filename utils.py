@@ -2,8 +2,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 import numba
 from scipy.interpolate import griddata
-import pandas as pd
-import os
 import pygimli as pg
 from pygimli.physics import ert
 
@@ -16,16 +14,10 @@ def rb_gauss_seidel(
     I,
     h
 ):
-    # formule de poisson généralisée
 
     ny, nx = V.shape
-    # h2 = h * h  chat me dit de ne pas utiliser h^2 lorsqu'on est en A
+    h2 = h * h 
 
-    
-
-    # =========================
-    # 🔴 RED PASS
-    # =========================
     err_red = 0.0
 
     for j in numba.prange(1, ny-1):
@@ -37,7 +29,7 @@ def rb_gauss_seidel(
             v_old = V[j, i]
 
             new_val = (
-                I[j, i]
+                I[j, i] * h2
                 + sigma_ifhs[j, i] * V[j, i+1]
                 + sigma_ibhs[j, i] * V[j, i-1]
                 + sigma_jfhs[j, i] * V[j+1, i]
@@ -51,9 +43,7 @@ def rb_gauss_seidel(
 
         err_red += tmp
 
-    # =========================
-    # ⚫ BLACK PASS
-    # =========================
+
     err_black = 0.0
 
     for j in numba.prange(1, ny-1):
@@ -120,7 +110,7 @@ class Sol:
     def __genererSigma__(self):
         # voir les sources et changer le setting de resistivité
         # self.matriceSigma = np.random.uniform(low=1, high=10, size=(self.ny, self.nx))
-        self.matriceSigma = np.ones((self.ny,self.nx))* 1/5000
+        self.matriceSigma = np.ones((self.ny,self.nx))* 1/250
         # self.matriceSigma[:90,:] =1/50
         yy, xx = np.meshgrid(np.arange(self.ny), np.arange(self.nx), indexing='ij')
         self.matriceSigma[(yy-90)**2 + (xx-30)**2 <= 5**2] = 1/1000
@@ -322,9 +312,6 @@ class Sol:
         return list(zip(listeA, listeB, listeM, listeN))
     
     def afficherPseudoSection(self):
-        print(self.listeX)
-        print(self.listeZ)
-        print(self.listePseudoSection)
         xi = np.linspace(self.listeX.min(), self.listeX.max(), 200)
         zi = np.linspace(self.listeZ.min(), self.listeZ.max(), 200)
 
@@ -344,54 +331,19 @@ class Sol:
         plt.title("Pseudo-section de résistivité apparente")
         plt.show()
 
-    def enregistrerData(self, PATH, name):
+    def inversion(self):
         coord_abmn = self.__genererPositionsABMN__()
-        # Les coordonnées des électrodes A, B, M et N doivent être en indice
-        # pour l'inversion, donc j'ai fait commencer les position à 0, 1, 2, ...
-        A = [(a[0]//2)-1 for a in coord_abmn]
-        B = [(b[1]//2)-1 for b in coord_abmn]
-        M = [(m[2]//2)-1 for m in coord_abmn]
-        N = [(n[3]//2)-1 for n in coord_abmn]
-        data_sensors = {
-            'ax': A, 'ay':np.zeros(len(A)),
-            'bx': B, 'by':np.zeros(len(B)),
-            'mx': M, 'my':np.zeros(len(M)),
-            'nx': N, 'ny':np.zeros(len(N)),
-            'rho': self.listePseudoSection,
-        }
-        
-        data_measures = {
-            'x': np.arange(2, self.nx, 2), 
-            'y': np.zeros(len(np.arange(2, self.nx, 2)))
-        }
 
-        df_sensors = pd.DataFrame(data_sensors)
-        df_measures = pd.DataFrame(data_measures)
-
-        with pd.ExcelWriter(os.path.join(PATH, name)) as writer:
-            df_sensors.to_excel(writer, sheet_name="Sensors", index=False)
-            df_measures.to_excel(writer, sheet_name="Measurements", index=False)
-
-        print(f"Enregistrement effectué à la destination {os.path.join(PATH, name)}")
-
-
-    def inversion(self, PATH):
-        df_sensors = pd.read_excel(PATH, sheet_name="Sensors")
-        df_measure = pd.read_excel(PATH, sheet_name="Measurements")
 
         data = pg.DataContainerERT()
 
-        for i, row in df_sensors.iterrows():
-            data.createSensor([row['x'], row['y'], row.get('z', 0)])
+        for i in range(self.nx):
+            data.createSensor([i, 0, 0])
 
-        for i, row in df_measure.iterrows():
-            data.createFourPointData(i, 
-                                    int(row['ax']), 
-                                    int(row['bx']), 
-                                    int(row['mx']), 
-                                    int(row['nx']))
+        for i, (A, B, M, N) in enumerate(coord_abmn):
+            data.createFourPointData(i, A, B, M, N)
             
-        data["rhoa"] = df_measure["rho"].values
+        data["rhoa"] = self.listePseudoSection
 
         data.set("k", ert.geometricFactor(data))
 
@@ -409,8 +361,7 @@ class Sol:
         self.inverted_x = x
         self.inverted_y = y
         self.inverted_res = model_vals
-        
-        return np.array(x), np.array(y), np.array(model_vals)
+
     
     
     def afficherInversion(self):
@@ -423,7 +374,7 @@ class Sol:
 
         plt.figure(figsize=(12, 5))
         cntr = plt.contourf(xi, yi, zi, levels=100, cmap="Spectral_r")
-        plt.colorbar(cntr, label="Résistivité ($\Omega m$)")
+        plt.colorbar(cntr, label="Résistivité ($\\Omega m$)")
 
         plt.xlabel("Distance (m)")
         plt.ylabel("Profondeur (m)")
