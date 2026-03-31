@@ -4,6 +4,8 @@ import numba
 from scipy.interpolate import griddata
 import pandas as pd
 import os
+import pygimli as pg
+from pygimli.physics import ert
 
 @numba.njit(fastmath=True, parallel=True)
 def rb_gauss_seidel(
@@ -350,18 +352,83 @@ class Sol:
         B = [(b[1]//2)-1 for b in coord_abmn]
         M = [(m[2]//2)-1 for m in coord_abmn]
         N = [(n[3]//2)-1 for n in coord_abmn]
-        data = {
+        data_sensors = {
             'ax': A, 'ay':np.zeros(len(A)),
-            'b': B, 'by':np.zeros(len(B)),
-            'm': M, 'my':np.zeros(len(M)),
-            'n': N, 'ny':np.zeros(len(N)),
+            'bx': B, 'by':np.zeros(len(B)),
+            'mx': M, 'my':np.zeros(len(M)),
+            'nx': N, 'ny':np.zeros(len(N)),
             'rho': self.listePseudoSection,
-            'x': self.listeX,
-            'z': self.listeZ
         }
-        df = pd.DataFrame(data)
-        df.to_excel(os.path.join(PATH, name), index=False)
+        
+        data_measures = {
+            'x': np.arange(2, self.nx, 2), 
+            'y': np.zeros(len(np.arange(2, self.nx, 2)))
+        }
+
+        df_sensors = pd.DataFrame(data_sensors)
+        df_measures = pd.DataFrame(data_measures)
+
+        with pd.ExcelWriter(os.path.join(PATH, name)) as writer:
+            df_sensors.to_excel(writer, sheet_name="Sensors", index=False)
+            df_measures.to_excel(writer, sheet_name="Measurements", index=False)
+
         print(f"Enregistrement effectué à la destination {os.path.join(PATH, name)}")
+
+
+    def inversion(self, PATH):
+        df_sensors = pd.read_excel(PATH, sheet_name="Sensors")
+        df_measure = pd.read_excel(PATH, sheet_name="Measurements")
+
+        data = pg.DataContainerERT()
+
+        for i, row in df_sensors.iterrows():
+            data.createSensor([row['x'], row['y'], row.get('z', 0)])
+
+        for i, row in df_measure.iterrows():
+            data.createFourPointData(i, 
+                                    int(row['ax']), 
+                                    int(row['bx']), 
+                                    int(row['mx']), 
+                                    int(row['nx']))
+            
+        data["rhoa"] = df_measure["rho"].values
+
+        data.set("k", ert.geometricFactor(data))
+
+        data["err"] = pg.Vector(data.size(), 0.03)
+
+        mgr = ert.ERTManager(data)
+
+        model = mgr.invert(data=data, lam=20, verbose=True) # , mesh=mesh
+
+        model_vals = np.array(model).tolist() 
+        parad = mgr.paraDomain
+        x = [c.x() for c in parad.cellCenters()]
+        y = [c.y() for c in parad.cellCenters()]
+
+        self.inverted_x = x
+        self.inverted_y = y
+        self.inverted_res = model_vals
+        
+        return np.array(x), np.array(y), np.array(model_vals)
+    
+    
+    def afficherInversion(self):
+        
+        xi = np.linspace(min(self.inverted_x), max(self.inverted_x), 200)
+        yi = np.linspace(min(self.inverted_y), max(self.inverted_y), 100)
+        xi, yi = np.meshgrid(xi, yi)
+
+        zi = griddata((self.inverted_x, self.inverted_y), self.inverted_res, (xi, yi), method='cubic')
+
+        plt.figure(figsize=(12, 5))
+        cntr = plt.contourf(xi, yi, zi, levels=100, cmap="Spectral_r")
+        plt.colorbar(cntr, label="Résistivité ($\Omega m$)")
+
+        plt.xlabel("Distance (m)")
+        plt.ylabel("Profondeur (m)")
+        plt.title("Coupe de Résistivité Inversée")
+        plt.show()
 
         
 

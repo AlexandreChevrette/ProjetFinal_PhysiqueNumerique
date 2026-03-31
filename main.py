@@ -20,7 +20,7 @@ sol.afficherResistanceApparente()
 sol.calculerPseudoSection(1)
 sol.afficherPseudoSection()
 
-sol.enregistrerData(PATH, 'test.xlsx')
+sol.enregistrerData(PATH, 'test_2.xlsx')
 
 
 ## optmisations faites:
