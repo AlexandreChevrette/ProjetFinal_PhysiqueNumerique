@@ -351,10 +351,10 @@ class Sol:
         M = [(m[2]//2)-1 for m in coord_abmn]
         N = [(n[3]//2)-1 for n in coord_abmn]
         data = {
-            'a': A,
-            'b': B,
-            'm': M,
-            'n': N,
+            'ax': A, 'ay':np.zeros(len(A)),
+            'b': B, 'by':np.zeros(len(B)),
+            'm': M, 'my':np.zeros(len(M)),
+            'n': N, 'ny':np.zeros(len(N)),
             'rho': self.listePseudoSection,
             'x': self.listeX,
             'z': self.listeZ
