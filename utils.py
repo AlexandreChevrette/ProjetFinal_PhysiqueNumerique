@@ -4,8 +4,8 @@ import numba
 from scipy.interpolate import griddata
 import pandas as pd
 import os
-import pygimli as pg
-from pygimli.physics import ert
+# import pygimli as pg
+# from pygimli.physics import ert
 
 @numba.njit(fastmath=True, parallel=True)
 def rb_gauss_seidel(
@@ -429,6 +429,18 @@ class Sol:
         plt.ylabel("Profondeur (m)")
         plt.title("Coupe de Résistivité Inversée")
         plt.show()
+
+
+    def retrosubstitution(A, b): # Pour résoudre un système Ax=b
+        m, n = A.shape
+        x = np.empty(m, float)
+        for i in range(m-1, -1, -1):
+            x[i] = b[i]
+            for j in range(i+1, n):
+                x[i] -= A[i,j] * x[j]
+            x[i] = x[i] / A[i,i]
+
+        return x
 
         
 
