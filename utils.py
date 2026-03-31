@@ -297,12 +297,12 @@ class Sol:
         listeB = []
         listeM = []
         listeN = []
-        pas = 4
+        pas = 6
 
         A_ini = 2
-        M_ini = 3
-        N_ini = 5
-        B_ini = 6
+        M_ini = 4
+        N_ini = 6
+        B_ini = 8
         for i in range((self.nx-B_ini)//(2*pas)):
             A = A_ini
             M = M_ini + i*pas
@@ -344,10 +344,12 @@ class Sol:
 
     def enregistrerData(self, PATH, name):
         coord_abmn = self.__genererPositionsABMN__()
-        A = [a[0] for a in coord_abmn]
-        B = [b[1] for b in coord_abmn]
-        M = [m[2] for m in coord_abmn]
-        N = [n[3] for n in coord_abmn]
+        # Les coordonnées des électrodes A, B, M et N doivent être en indice
+        # pour l'inversion, donc j'ai fait commencer les position à 0, 1, 2, ...
+        A = [(a[0]//2)-1 for a in coord_abmn]
+        B = [(b[1]//2)-1 for b in coord_abmn]
+        M = [(m[2]//2)-1 for m in coord_abmn]
+        N = [(n[3]//2)-1 for n in coord_abmn]
         data = {
             'a': A,
             'b': B,
