@@ -107,6 +107,7 @@ class Sol:
         self.sigma_jbhs = np.zeros((self.ny,self.nx))
         self.sigma_deno = np.zeros((self.ny,self.nx))
         self.matricePotentiel = np.zeros((self.ny,self.nx)) 
+        self.matricePotentiel_adj = np.zeros((self.ny,self.nx)) 
         self.matriceCourant = np.zeros((self.ny,self.nx)) 
         self.__genererSigma__()
         self.electrodeList = np.array([])
@@ -117,6 +118,8 @@ class Sol:
         self.listeZ = np.array([])
         self.listePseudoSection = np.array([])
         self.liste_mat_pot = np.array([])
+        self.electrodeList_adj = np.array([])
+        self.electrodeMesuresList_adj = np.array([])
 
     def __genererSigma__(self):
         # voir les sources et changer le setting de resistivité
@@ -152,9 +155,13 @@ class Sol:
             + self.sigma_jbhs
         )
     
-    def __genererCourant__(self):
-        for electrode in self.electrodeList:
-            self.matriceCourant[electrode.posY, electrode.posX] = electrode.courant
+    def __genererCourant__(self, adj=False):
+        if adj:
+            for electrode in self.electrodeMesuresList_adj:
+                self.matriceCourant[electrode.posY, electrode.posX] = electrode.courant
+        else:
+            for electrode in self.electrodeList:
+                self.matriceCourant[electrode.posY, electrode.posX] = electrode.courant
         
     def afficherSigma(self):
         plt.figure()
@@ -179,14 +186,17 @@ class Sol:
 
     def placerElectrode(self, posX, posY, courant):
         self.electrodeList = np.append(self.electrodeList, Electrode(posX,posY,courant))
+        self.electrodeMesuresList_adj = np.append(self.electrodeMesuresList_adj, Electrode(posX,posY,courant))
 
     def placerElectrodeMesure(self, posX, posY):
         self.electrodeMesuresList = np.append(self.electrodeMesuresList, ElectrodeMesure(posX, posY))
+        self.electrodeList_adj = np.append(self.electrodeList_adj, ElectrodeMesure(posX, posY))
+
 
     def enleverElectrodes(self):
         self.electrodeList = np.array([])
 
-    def calculerPotentiel(self):
+    def calculerPotentiel(self, adj=False):
         # voir sources
 
         it=0
@@ -194,21 +204,38 @@ class Sol:
         h = 1
         erreur = 1
         niter= 1000000
-        V = self.matricePotentiel #reference
-        self.__genererCourant__()
-        I = self.matriceCourant.copy()
-        sigma_ifhs = self.sigma_ifhs.copy()
-        sigma_ibhs = self.sigma_ibhs.copy()
-        sigma_jfhs = self.sigma_jfhs.copy()
-        sigma_jbhs = self.sigma_jbhs.copy()
-        sigma_deno = self.sigma_deno.copy()
 
-        while erreur > tol and it < niter:
+        if adj:
+            V = self.matricePotentiel_adj #reference
+            self.__genererCourant__(adj=True)
+            I = self.matriceCourant.copy()
+            sigma_ifhs = self.sigma_ifhs.copy()
+            sigma_ibhs = self.sigma_ibhs.copy()
+            sigma_jfhs = self.sigma_jfhs.copy()
+            sigma_jbhs = self.sigma_jbhs.copy()
+            sigma_deno = self.sigma_deno.copy()
 
-            erreur = rb_gauss_seidel(V, sigma_ifhs,sigma_ibhs,sigma_jfhs,sigma_jbhs,sigma_deno, I, h)
+            while erreur > tol and it < niter:
 
-            it += 1  
-            # print(f"Erreur: {erreur}")
+                erreur = rb_gauss_seidel(V, sigma_ifhs,sigma_ibhs,sigma_jfhs,sigma_jbhs,sigma_deno, I, h)
+
+                it += 1  
+        else:
+            V = self.matricePotentiel #reference
+            self.__genererCourant__()
+            I = self.matriceCourant.copy()
+            sigma_ifhs = self.sigma_ifhs.copy()
+            sigma_ibhs = self.sigma_ibhs.copy()
+            sigma_jfhs = self.sigma_jfhs.copy()
+            sigma_jbhs = self.sigma_jbhs.copy()
+            sigma_deno = self.sigma_deno.copy()
+
+            while erreur > tol and it < niter:
+
+                erreur = rb_gauss_seidel(V, sigma_ifhs,sigma_ibhs,sigma_jfhs,sigma_jbhs,sigma_deno, I, h)
+
+                it += 1  
+                # print(f"Erreur: {erreur}")
 
 
     def Jacobien(self):
@@ -218,58 +245,114 @@ class Sol:
         # Comment un petit changement de position change le voltage
         # Comment un petit changement de conductivité change le voltage
         self.calculerPotentiel()
-        
-        
+        plt.figure()
+        plt.imshow(self.matricePotentiel, origin='lower')
+        plt.show()
+
+        # self.electrodeList_adj = self.electrodeMesuresList.copy()
+        # self.electrodeMesuresList_adj = self.electrodeList.copy()
+        self.calculerPotentiel(adj=True)
+        plt.figure()
+        plt.imshow(self.matricePotentiel, origin='lower')
+        plt.show()
 
 
 
-    def calculerResApparente(self, courantInjection):
+    def calculerResApparente(self, courantInjection, adj=False):
         if (len(self.electrodeMesuresList) != 2):
             print("Seulement deux sondes de mesures doivent être utilisés pour calculer la resistance apparente")
             return
         
-        M = self.electrodeMesuresList[0]
-        N = self.electrodeMesuresList[1]
-        coord_ab = self.__genererPositionsAB__(M, N)
+        if adj:
+            M = self.electrodeMesuresList[0]
+            N = self.electrodeMesuresList[1]
+            coord_ab = self.__genererPositionsAB__(M, N)
+            
+            
+            listeRho = []
+            listeAB2 = []
+            for (a, b) in coord_ab:
+                rho, ab2 = self.__calculerUnAB__(a, b, M.posX, N.posX, courantInjection, adj=True)
+                listeRho.append(rho)
+                listeAB2.append(ab2)
+
+            self.listeResistanceApparente = np.array(listeRho)
+            self.listeAB2 = np.array(listeAB2)
         
-        
-        listeRho = []
-        listeAB2 = []
-        for (a, b) in coord_ab:
-            rho, ab2 = self.__calculerUnAB__(a, b, M.posX, N.posX, courantInjection)
-            listeRho.append(rho)
-            listeAB2.append(ab2)
+        else:
+            M = self.electrodeMesuresList[0]
+            N = self.electrodeMesuresList[1]
+            coord_ab = self.__genererPositionsAB__(M, N)
+            
+            
+            listeRho = []
+            listeAB2 = []
+            for (a, b) in coord_ab:
+                rho, ab2 = self.__calculerUnAB__(a, b, M.posX, N.posX, courantInjection)
+                listeRho.append(rho)
+                listeAB2.append(ab2)
 
-        self.listeResistanceApparente = np.array(listeRho)
-        self.listeAB2 = np.array(listeAB2)
+            self.listeResistanceApparente = np.array(listeRho)
+            self.listeAB2 = np.array(listeAB2)
 
-    def __calculerUnAB__(self, a, b, M, N, courantInjection):
-        self.matriceCourant = np.zeros((self.ny,self.nx))
-        # self.matricePotentiel = np.zeros((self.ny,self.nx))
-        self.enleverElectrodes()
+    def __calculerUnAB__(self, a, b, M, N, courantInjection, adj=False):
 
-        self.placerElectrode(a, self.ny-2, courantInjection)
-        self.placerElectrode(b, self.ny-2, -courantInjection)
-        self.__genererCourant__()
-        self.calculerPotentiel()
-        
-        dV = self.matricePotentiel[self.ny-2, M] - self.matricePotentiel[self.ny-2, N]
+        if adj:
+            self.matriceCourant = np.zeros((self.ny,self.nx))
+            # self.matricePotentiel = np.zeros((self.ny,self.nx))
+            self.enleverElectrodes()
 
-        AB = abs(b - a)
-        AB_2 = AB / 2
+            self.placerElectrode(a, self.ny-2, courantInjection)
+            self.placerElectrode(b, self.ny-2, -courantInjection)
+            self.__genererCourant__(adj=True)
+            self.calculerPotentiel(adj=True)
+            
+            dV = self.matricePotentiel[self.ny-2, M] - self.matricePotentiel[self.ny-2, N]
 
-        AM = abs(M - a)
-        BM = abs(M - b)
-        AN = abs(N - a)
-        BN = abs(N - b)
+            AB = abs(b - a)
+            AB_2 = AB / 2
 
-        # K = 2 * np.pi/((1/AM-1/AN)-(1/BM-1/BN))
+            AM = abs(M - a)
+            BM = abs(M - b)
+            AN = abs(N - a)
+            BN = abs(N - b)
+
+            # K = 2 * np.pi/((1/AM-1/AN)-(1/BM-1/BN))
 
 
-        # En 2d, la formule de la résistivité apparente pour un 
-        # montage de Schlumberger est donnée par  selon chatGPT:
-        K_2D = np.pi / np.log((AN * BM) / (AM * BN)) 
-        rho = K_2D * dV / (courantInjection) 
+            # En 2d, la formule de la résistivité apparente pour un 
+            # montage de Schlumberger est donnée par  selon chatGPT:
+            K_2D = np.pi / np.log((AN * BM) / (AM * BN)) 
+            rho = K_2D * dV / (courantInjection) 
+
+        else:
+
+            self.matriceCourant = np.zeros((self.ny,self.nx))
+            # self.matricePotentiel = np.zeros((self.ny,self.nx))
+            self.enleverElectrodes()
+
+            self.placerElectrode(a, self.ny-2, courantInjection)
+            self.placerElectrode(b, self.ny-2, -courantInjection)
+            self.__genererCourant__()
+            self.calculerPotentiel()
+            
+            dV = self.matricePotentiel[self.ny-2, M] - self.matricePotentiel[self.ny-2, N]
+
+            AB = abs(b - a)
+            AB_2 = AB / 2
+
+            AM = abs(M - a)
+            BM = abs(M - b)
+            AN = abs(N - a)
+            BN = abs(N - b)
+
+            # K = 2 * np.pi/((1/AM-1/AN)-(1/BM-1/BN))
+
+
+            # En 2d, la formule de la résistivité apparente pour un 
+            # montage de Schlumberger est donnée par  selon chatGPT:
+            K_2D = np.pi / np.log((AN * BM) / (AM * BN)) 
+            rho = K_2D * dV / (courantInjection) 
 
         return rho, AB_2
         
