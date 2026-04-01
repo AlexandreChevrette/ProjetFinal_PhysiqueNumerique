@@ -209,6 +209,49 @@ class Sol:
             it += 1  
             # print(f"Erreur: {erreur}")
 
+    
+    def get_grad(self):
+        pot = self.matricePotentiel
+        self.grad_x = np.zeros((self.ny, self.nx))
+        self.grad_y = np.zeros((self.ny, self.nx))
+
+        for i in range(self.nx-1):
+            for j in range(self.ny-1):
+                if i==0: 
+                    self.grad_x[j, i] = (-(3*pot[j, i])+(4*pot[j, i+1])-pot[j, i+2])/2
+
+                elif i==self.nx: 
+                    self.grad_x[j, i] = ((3*pot[j, i])-(4*pot[j, i-1])+pot[j, i-2])/2
+
+                elif j==0:
+                    self.grad_y[j, i] = (-(3*pot[j, i])+(4*pot[j+1, i])-pot[j+2, i])/2
+
+                elif j==self.ny:
+                    self.grad_y[j, i] = ((3*pot[j, i])-(4*pot[j-1, i])+pot[j-2, i])/2
+
+
+                else:
+                    self.grad_x[j, i] = (pot[j, i+1] - pot[j, i-1])/2
+                    self.grad_y[j, i] = (pot[j+1, i] - pot[j-1, i])/2
+
+
+        return self.grad_x, self.grad_y
+    
+
+    def affichergradlImSHOW(self):
+        plt.figure()
+        plt.imshow(self.grad_y, origin='lower')
+        plt.show()
+
+
+    def get_grad_adj(self):
+        self.electrodeList = self.electrodeMesuresList.copy()
+        self.electrodeMesuresList = self.electrodeList.copy()
+
+        pot_adj = self.matricePotentiel
+        pass
+
+
     def calculerResApparente(self, courantInjection):
         if (len(self.electrodeMesuresList) != 2):
             print("Seulement deux sondes de mesures doivent être utilisés pour calculer la resistance apparente")
@@ -239,7 +282,7 @@ class Sol:
         self.__genererCourant__()
         self.calculerPotentiel()
         
-        dV = self.matricePotentiel[98, M] - self.matricePotentiel[98, N]
+        dV = self.matricePotentiel[self.ny-2, M] - self.matricePotentiel[self.ny-2, N]
 
         AB = abs(b - a)
         AB_2 = AB / 2
@@ -322,9 +365,6 @@ class Sol:
         return list(zip(listeA, listeB, listeM, listeN))
     
     def afficherPseudoSection(self):
-        print(self.listeX)
-        print(self.listeZ)
-        print(self.listePseudoSection)
         xi = np.linspace(self.listeX.min(), self.listeX.max(), 200)
         zi = np.linspace(self.listeZ.min(), self.listeZ.max(), 200)
 

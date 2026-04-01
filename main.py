@@ -11,14 +11,17 @@ sol.placerElectrode(54, 98, -1)
 sol.afficherSigma()
 sol.calculerPotentiel()
 sol.afficherPotentielImSHOW()
+# sol.get_grad()
+# sol.affichergradlImSHOW()
 
-sol.placerElectrodeMesure(49, 98)
-sol.placerElectrodeMesure(51, 98)
-sol.calculerResApparente(1)
-sol.afficherResistanceApparente()
 
-sol.calculerPseudoSection(1)
-sol.afficherPseudoSection()
+# sol.placerElectrodeMesure(49, 98)
+# sol.placerElectrodeMesure(51, 98)
+# sol.calculerResApparente(1)
+# sol.afficherResistanceApparente()
+
+# sol.calculerPseudoSection(1)
+# sol.afficherPseudoSection()
 
 # sol.enregistrerData(PATH, 'test_3.xlsx')
 
