@@ -116,6 +116,7 @@ class Sol:
         self.listeX = np.array([])
         self.listeZ = np.array([])
         self.listePseudoSection = np.array([])
+        self.liste_mat_pot = np.array([])
 
     def __genererSigma__(self):
         # voir les sources et changer le setting de resistivité
@@ -209,47 +210,17 @@ class Sol:
             it += 1  
             # print(f"Erreur: {erreur}")
 
-    
-    def get_grad(self):
-        pot = self.matricePotentiel
-        self.grad_x = np.zeros((self.ny, self.nx))
-        self.grad_y = np.zeros((self.ny, self.nx))
 
-        for i in range(self.nx-1):
-            for j in range(self.ny-1):
-                if i==0: 
-                    self.grad_x[j, i] = (-(3*pot[j, i])+(4*pot[j, i+1])-pot[j, i+2])/2
+    def Jacobien(self):
+        coord_abmn = self.__genererPositionsABMN__()
+        nb_config = len(coord_abmn)
+        # Jacobien de la position et jacobien de la conductivité concaténé
+        # Comment un petit changement de position change le voltage
+        # Comment un petit changement de conductivité change le voltage
+        self.calculerPotentiel()
+        
+        
 
-                elif i==self.nx: 
-                    self.grad_x[j, i] = ((3*pot[j, i])-(4*pot[j, i-1])+pot[j, i-2])/2
-
-                elif j==0:
-                    self.grad_y[j, i] = (-(3*pot[j, i])+(4*pot[j+1, i])-pot[j+2, i])/2
-
-                elif j==self.ny:
-                    self.grad_y[j, i] = ((3*pot[j, i])-(4*pot[j-1, i])+pot[j-2, i])/2
-
-
-                else:
-                    self.grad_x[j, i] = (pot[j, i+1] - pot[j, i-1])/2
-                    self.grad_y[j, i] = (pot[j+1, i] - pot[j-1, i])/2
-
-
-        return self.grad_x, self.grad_y
-    
-
-    def affichergradlImSHOW(self):
-        plt.figure()
-        plt.imshow(self.grad_y, origin='lower')
-        plt.show()
-
-
-    def get_grad_adj(self):
-        self.electrodeList = self.electrodeMesuresList.copy()
-        self.electrodeMesuresList = self.electrodeList.copy()
-
-        pot_adj = self.matricePotentiel
-        pass
 
 
     def calculerResApparente(self, courantInjection):
