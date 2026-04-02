@@ -13,15 +13,33 @@ sol.calculerPotentiel()
 sol.afficherPotentielImSHOW()
 
 
-sol.placerElectrodeMesure(49, 98)
-sol.placerElectrodeMesure(51, 98)
+sol.placerElectrodeMesure(48, 98)
+sol.placerElectrodeMesure(52, 98)
 sol.calculerResApparente(1)
 sol.afficherResistanceApparente()
 
-sol.Jacobien()
+# sol.Jacobien()
 
 sol.calculerPseudoSection(1)
 sol.afficherPseudoSection()
+
+
+sol.afficherModeleResistivite()
+d_obs = sol.simulerDonnees(courantInjection=1.0)
+sigma_true = sol.matriceSigma.copy()
+sol.matriceSigma = np.ones((sol.ny, sol.nx)) * (1/5000)
+sol.matriceSigma[-1, :] = 1e-12
+sol.__genererSigma__()
+sol.afficherModeleResistivite()
+misfits = sol.inversion_maison(
+    d_obs=d_obs,
+    courantInjection=1.0,
+    niter=8,
+    lam=5000,
+    alpha=0.2
+)
+sol.afficherModeleResistivite()
+sol.afficherMisfit(misfits)
 
 # sol.enregistrerData(PATH, 'test_3.xlsx')
 
