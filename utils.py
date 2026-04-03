@@ -122,41 +122,6 @@ class Sol:
         self.electrodeList_adj = np.array([])
         self.electrodeMesuresList_adj = np.array([])
 
-    def __genererSigma__(self):
-        """
-        Update FD coefficients from current self.matriceSigma.
-        Does NOT overwrite the model.
-        """
-        # avoid division by zero
-        sfull = self.matriceSigma.copy()
-        sfull[sfull <= 1e-12] = 1e-12
-
-        # center
-        s = sfull[1:-1, 1:-1]
-
-        # neighbors
-        sip = sfull[1:-1, 2:]   # i+1
-        sim = sfull[1:-1, :-2]  # i-1
-        sjp = sfull[2:, 1:-1]   # j+1
-        sjm = sfull[:-2, 1:-1]  # j-1
-
-        # harmonic means
-        self.sigma_ifhs.fill(0.0)
-        self.sigma_ibhs.fill(0.0)
-        self.sigma_jfhs.fill(0.0)
-        self.sigma_jbhs.fill(0.0)
-
-        self.sigma_ifhs[1:-1, 1:-1] = 2.0 * s * sip / (s + sip)
-        self.sigma_ibhs[1:-1, 1:-1] = 2.0 * s * sim / (s + sim)
-        self.sigma_jfhs[1:-1, 1:-1] = 2.0 * s * sjp / (s + sjp)
-        self.sigma_jbhs[1:-1, 1:-1] = 2.0 * s * sjm / (s + sjm)
-
-        self.sigma_deno = (
-            self.sigma_ifhs
-            + self.sigma_ibhs
-            + self.sigma_jfhs
-            + self.sigma_jbhs
-        )
 
     def initialiserModele(self):
         """
@@ -172,39 +137,39 @@ class Sol:
 
         self.__genererSigma__()
 
-    # def __genererSigma__(self):
-    #     # voir les sources et changer le setting de resistivité
-    #     # self.matriceSigma = np.random.uniform(low=1, high=10, size=(self.ny, self.nx))
-    #     self.matriceSigma = np.ones((self.ny,self.nx))* 1/5000
-    #     # self.matriceSigma[:90,:] =1/50
-    #     yy, xx = np.meshgrid(np.arange(self.ny), np.arange(self.nx), indexing='ij')
-    #     self.matriceSigma[(yy-90)**2 + (xx-30)**2 <= 5**2] = 1/1000
+    def __genererSigma__(self):
+        # voir les sources et changer le setting de resistivité
+        # self.matriceSigma = np.random.uniform(low=1, high=10, size=(self.ny, self.nx))
+        self.matriceSigma = np.ones((self.ny,self.nx))* 1/5000
+        # self.matriceSigma[:90,:] =1/50
+        yy, xx = np.meshgrid(np.arange(self.ny), np.arange(self.nx), indexing='ij')
+        self.matriceSigma[(yy-90)**2 + (xx-30)**2 <= 5**2] = 1/1000
 
        
-    #     self.matriceSigma[-1,:] = 0
+        self.matriceSigma[-1,:] = 0
 
-    #     # center
-    #     s = self.matriceSigma[1:-1, 1:-1]
+        # center
+        s = self.matriceSigma[1:-1, 1:-1]
 
-    #     # neighbors
-    #     sip = self.matriceSigma[1:-1, 2:]   # i+1
-    #     sim = self.matriceSigma[1:-1, :-2]  # i-1
-    #     sjp = self.matriceSigma[2:, 1:-1]   # j+1
-    #     sjm = self.matriceSigma[:-2, 1:-1]  # j-1
+        # neighbors
+        sip = self.matriceSigma[1:-1, 2:]   # i+1
+        sim = self.matriceSigma[1:-1, :-2]  # i-1
+        sjp = self.matriceSigma[2:, 1:-1]   # j+1
+        sjm = self.matriceSigma[:-2, 1:-1]  # j-1
 
-    #     # harmonic means
-    #     self.sigma_ifhs[1:-1, 1:-1] = 2.0 * s * sip / (s + sip)
-    #     self.sigma_ibhs[1:-1, 1:-1] = 2.0 * s * sim / (s + sim)
-    #     self.sigma_jfhs[1:-1, 1:-1] = 2.0 * s * sjp / (s + sjp)
-    #     self.sigma_jbhs[1:-1, 1:-1] = 2.0 * s * sjm / (s + sjm)
+        # harmonic means
+        self.sigma_ifhs[1:-1, 1:-1] = 2.0 * s * sip / (s + sip)
+        self.sigma_ibhs[1:-1, 1:-1] = 2.0 * s * sim / (s + sim)
+        self.sigma_jfhs[1:-1, 1:-1] = 2.0 * s * sjp / (s + sjp)
+        self.sigma_jbhs[1:-1, 1:-1] = 2.0 * s * sjm / (s + sjm)
 
-    #     # denominator
-    #     self.sigma_deno = (
-    #         self.sigma_ifhs
-    #         + self.sigma_ibhs
-    #         + self.sigma_jfhs
-    #         + self.sigma_jbhs
-    #     )
+        # denominator
+        self.sigma_deno = (
+            self.sigma_ifhs
+            + self.sigma_ibhs
+            + self.sigma_jfhs
+            + self.sigma_jbhs
+        )
     
     def __genererCourant__(self, adj=False):
         for electrode in self.electrodeList:
@@ -359,12 +324,6 @@ class Sol:
             # -----------------------------
             sens = -(dVdx_fwd * dVdx_adj + dVdy_fwd * dVdy_adj)
 
-            # optional: ignore boundaries
-            sens[0, :] = 0
-            sens[-1, :] = 0
-            sens[:, 0] = 0
-            sens[:, -1] = 0
-
             J[k, :] = sens.ravel()
         
         return J
@@ -377,6 +336,7 @@ class Sol:
         J_sigma = self.Jacobien(courantInjection)
         sigma_flat = self.matriceSigma.ravel()
         J_logsigma = J_sigma * sigma_flat[np.newaxis, :]
+        print(J_logsigma.shape)
         return J_logsigma
     
 
@@ -407,227 +367,12 @@ class Sol:
                 row[idx(j+1, i)] = 1.0
                 rows.append(row)
 
+        print(np.array(rows, dtype=np.float64).shape)
+
         return np.array(rows, dtype=np.float64)
-    
-
-    def cellules_actives(self):
-        """
-        Active inversion cells: only every 4th cell in x and z
-        to strongly reduce number of unknowns.
-        """
-        mask = np.zeros((self.ny, self.nx), dtype=bool)
-
-        zmax = int(0.6 * self.ny)
-
-        for j in range(2, zmax, 4):
-            for i in range(2, self.nx-2, 4):
-                mask[j, i] = True
-
-        return mask.ravel()
-    
-
-    def inversion_maison(self, d_obs, courantInjection=1.0, niter=6, lam=1e-1, alpha=1.0, sigma_min=1e-5, sigma_max=1.0):
-        """
-        Gauss-Newton inversion on m = log(sigma)
-
-        Parameters
-        ----------
-        d_obs : np.ndarray
-            Observed apparent resistivity data
-        courantInjection : float
-        niter : int
-            Number of inversion iterations
-        lam : float
-            Regularization weight
-        alpha : float
-            Step length
-        sigma_min, sigma_max : float
-            Bounds for conductivity
-
-        Returns
-        -------
-        misfits : list
-        """
-        # model parameter: m = log(sigma)
-        sigma = self.matriceSigma.copy()
-        sigma[sigma <= 1e-12] = 1e-12
-        m = np.log(sigma.ravel())
-
-        active = self.cellules_actives()
-        L_full = self.construire_L()
-
-        # keep only active columns
-        L = L_full[:, active]
-
-        misfits = []
-
-        best_m = m.copy()
-        best_misfit = np.inf
-
-        for it in range(niter):
-            print(f"\n===== Iteration {it+1}/{niter} =====")
-
-            # -----------------------------------
-            # 1) Update sigma model from m
-            # -----------------------------------
-            sigma_flat = np.exp(m)
-            sigma_flat = np.clip(sigma_flat, sigma_min, sigma_max)
-            self.matriceSigma = sigma_flat.reshape(self.ny, self.nx)
-
-            # force boundary
-            self.matriceSigma[-1, :] = 1e-12
-
-            self.__genererSigma__()
-
-            # -----------------------------------
-            # 2) Forward model
-            # -----------------------------------
-            d_calc = self.simulerDonnees(courantInjection)
-
-            # residual
-            eps_data = 1e-8
-            Wd = 1.0 / (np.abs(d_obs) + eps_data)
-
-            r = (d_obs - d_calc) * Wd
-            misfit_old = np.linalg.norm(r)
-            if misfit_old < best_misfit:
-                best_misfit = misfit_old
-                best_m = m.copy()
-            misfits.append(misfit_old)
-
-            print(f"Misfit = {misfit_old:.6e}")
-
-            # -----------------------------------
-            # 3) Jacobian wrt log(sigma)
-            # -----------------------------------
-            J_full = self.Jacobien_logsigma(courantInjection)
-            J = J_full[:, active]
-
-            print(f"J shape = {J.shape}")
-
-            # -----------------------------------
-            # 4) Solve Gauss-Newton update
-            # -----------------------------------
-            Jw = J * Wd[:, np.newaxis]
-            A = Jw.T @ Jw + lam * (L.T @ L)
-            b = Jw.T @ r - lam * (L.T @ (L @ m[active]))
-
-            dm_active = np.linalg.solve(A, b)
-
-            # expand back to full model
-            dm = np.zeros_like(m)
-            dm[active] = dm_active
-
-            dm = np.clip(dm, -0.2, 0.2)
-
-            # -----------------------------------
-            # 5) Update model
-            # -----------------------------------
-            # m = m + alpha * dm
-
-            print(f"||dm|| = {np.linalg.norm(dm):.6e}")
-
-            # -----------------------------------
-            # 5) Line search (VERY IMPORTANT)
-            # -----------------------------------
-            alpha_try = alpha
-            success = False
-
-            for ls in range(8):  # up to 8 step halvings
-                m_trial = m + alpha_try * dm
-
-                sigma_trial = np.exp(m_trial)
-                sigma_trial = np.clip(sigma_trial, sigma_min, sigma_max)
-
-                self.matriceSigma = sigma_trial.reshape(self.ny, self.nx)
-                self.matriceSigma[-1, :] = 1e-12
-                self.__genererSigma__()
-
-                d_trial = self.simulerDonnees(courantInjection)
-                misfit_trial = np.linalg.norm((d_obs - d_trial) * Wd)
-
-                print(f"  line search {ls+1}: alpha={alpha_try:.4f}, misfit={misfit_trial:.6e}")
-
-                if misfit_trial < misfit_old:
-                    print("  -> step accepted")
-                    m = m_trial
-                    success = True
-                    break
-                else:
-                    alpha_try *= 0.5
-
-            if not success:
-                print("  -> no improving step found, stopping inversion")
-                break
-
-        # final update back into self
-        sigma_flat = np.exp(best_m)
-        sigma_flat = np.clip(sigma_flat, sigma_min, sigma_max)
-        self.matriceSigma = sigma_flat.reshape(self.ny, self.nx)
-        self.matriceSigma[-1, :] = 1e-12
-        self.__genererSigma__()
-
-        return misfits
-    
-
-    def afficherModeleResistivite(self):
-        rho = np.zeros_like(self.matriceSigma)
-        mask = self.matriceSigma > 1e-12
-        rho[mask] = 1.0 / self.matriceSigma[mask]
-
-        plt.figure(figsize=(8, 5))
-        plt.imshow(rho, origin='lower', aspect='auto')
-        plt.colorbar(label=r"Résistivité [$\Omega$m]")
-        plt.title("Modèle de résistivité")
-        plt.xlabel("X")
-        plt.ylabel("Z")
-        plt.show()
-
-    
-    def afficherMisfit(self, misfits):
-        plt.figure()
-        plt.plot(np.arange(1, len(misfits)+1), misfits, marker='o')
-        plt.xlabel("Iteration")
-        plt.ylabel("||d_obs - d_calc||")
-        plt.title("Convergence de l'inversion")
-        plt.grid(True)
-        plt.show()
-    
-
-    def simulerDonnees(self, courantInjection=1.0):
-        """
-        Simulate all pseudo-section data for current conductivity model.
-        Returns:
-            d_calc : shape (n_data,)
-        """
-        coord_abmn = self.__genererPositionsABMN__()
-        d_calc = []
-
-        for (a, b, M, N) in coord_abmn:
-            I_fwd = self.creer_source(
-                pos_plus=(self.ny-2, a),
-                pos_minus=(self.ny-2, b),
-                amplitude=courantInjection
-            )
-
-            V = self.resoudre_potentiel(I_fwd)
-
-            dV = V[self.ny-2, M] - V[self.ny-2, N]
-
-            AM = abs(M - a)
-            BM = abs(M - b)
-            AN = abs(N - a)
-            BN = abs(N - b)
-
-            K_2D = np.pi / np.log((AN * BM) / (AM * BN))
-            rho = K_2D * dV / courantInjection
-
-            d_calc.append(rho)
-
-        return np.array(d_calc, dtype=np.float64)
 
 
-    def calculerResApparente(self, courantInjection, adj=False):
+    def calculerResApparente(self, courantInjection):
         if (len(self.electrodeMesuresList) != 2):
             print("Seulement deux sondes de mesures doivent être utilisés pour calculer la resistance apparente")
             return
@@ -646,6 +391,9 @@ class Sol:
 
         self.listeResistanceApparente = np.array(listeRho)
         self.listeAB2 = np.array(listeAB2)
+
+        return self.listeResistanceApparente.copy()
+
 
     def __calculerUnAB__(self, a, b, M, N, courantInjection, adj=False):
 
@@ -707,8 +455,33 @@ class Sol:
             listeX.append((M + N) / 2)
 
         self.listePseudoSection = np.array(listeRho)
+        pseudo = self.listePseudoSection.copy()
         self.listeZ = np.array(listeZ)
         self.listeX = np.array(listeX)
+
+        return pseudo
+    
+
+    def calculerInversion(self, d_obs):
+        
+        # Modèle initial
+        # m = np.ones((self.ny, self.nx))*np.mean(d_obs)
+        self.matricePotentiel = np.ones((self.ny, self.nx))*np.mean(d_obs)
+
+        max_iter = 100000
+        # for iter in range(max_iter):
+        self.calculerPotentiel()
+        data_pred = self.calculerResApparente(1.0)
+
+        print(d_obs.shape)
+        print(data_pred.shape)
+
+        # residual = data_pred - d_obs
+
+        
+
+
+
 
     def __genererPositionsABMN__(self):
         listeA = []
