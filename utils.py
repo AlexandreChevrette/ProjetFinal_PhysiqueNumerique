@@ -137,39 +137,59 @@ class Sol:
 
         self.__genererSigma__()
 
+
     def __genererSigma__(self):
-        # voir les sources et changer le setting de resistivité
-        # self.matriceSigma = np.random.uniform(low=1, high=10, size=(self.ny, self.nx))
-        self.matriceSigma = np.ones((self.ny,self.nx))* 1/5000
-        # self.matriceSigma[:90,:] =1/50
-        yy, xx = np.meshgrid(np.arange(self.ny), np.arange(self.nx), indexing='ij')
-        self.matriceSigma[(yy-90)**2 + (xx-30)**2 <= 5**2] = 1/1000
+        # On ne touche plus à self.matriceSigma ici ! 
+        # On calcule seulement les coefficients pour le solveur
+        s = self.matriceSigma[1:-1, 1:-1]
+        sip = self.matriceSigma[1:-1, 2:]
+        sim = self.matriceSigma[1:-1, :-2]
+        sjp = self.matriceSigma[2:, 1:-1]
+        sjm = self.matriceSigma[:-2, 1:-1]
+
+        # Moyennes harmoniques (stabilité numérique pour le solveur)
+        self.sigma_ifhs[1:-1, 1:-1] = 2.0 * s * sip / (s + sip + 1e-20)
+        self.sigma_ibhs[1:-1, 1:-1] = 2.0 * s * sim / (s + sim + 1e-20)
+        self.sigma_jfhs[1:-1, 1:-1] = 2.0 * s * sjp / (s + sjp + 1e-20)
+        self.sigma_jbhs[1:-1, 1:-1] = 2.0 * s * sjm / (s + sjm + 1e-20)
+
+        self.sigma_deno = (self.sigma_ifhs + self.sigma_ibhs + 
+                           self.sigma_jfhs + self.sigma_jbhs)
+        
+
+    # def __genererSigma__(self):
+    #     # voir les sources et changer le setting de resistivité
+    #     # self.matriceSigma = np.random.uniform(low=1, high=10, size=(self.ny, self.nx))
+    #     self.matriceSigma = np.ones((self.ny,self.nx))* 1/5000
+    #     # self.matriceSigma[:90,:] =1/50
+    #     yy, xx = np.meshgrid(np.arange(self.ny), np.arange(self.nx), indexing='ij')
+    #     self.matriceSigma[(yy-90)**2 + (xx-30)**2 <= 5**2] = 1/1000
 
        
-        self.matriceSigma[-1,:] = 0
+    #     self.matriceSigma[-1,:] = 0
 
-        # center
-        s = self.matriceSigma[1:-1, 1:-1]
+    #     # center
+    #     s = self.matriceSigma[1:-1, 1:-1]
 
-        # neighbors
-        sip = self.matriceSigma[1:-1, 2:]   # i+1
-        sim = self.matriceSigma[1:-1, :-2]  # i-1
-        sjp = self.matriceSigma[2:, 1:-1]   # j+1
-        sjm = self.matriceSigma[:-2, 1:-1]  # j-1
+    #     # neighbors
+    #     sip = self.matriceSigma[1:-1, 2:]   # i+1
+    #     sim = self.matriceSigma[1:-1, :-2]  # i-1
+    #     sjp = self.matriceSigma[2:, 1:-1]   # j+1
+    #     sjm = self.matriceSigma[:-2, 1:-1]  # j-1
 
-        # harmonic means
-        self.sigma_ifhs[1:-1, 1:-1] = 2.0 * s * sip / (s + sip)
-        self.sigma_ibhs[1:-1, 1:-1] = 2.0 * s * sim / (s + sim)
-        self.sigma_jfhs[1:-1, 1:-1] = 2.0 * s * sjp / (s + sjp)
-        self.sigma_jbhs[1:-1, 1:-1] = 2.0 * s * sjm / (s + sjm)
+    #     # harmonic means
+    #     self.sigma_ifhs[1:-1, 1:-1] = 2.0 * s * sip / (s + sip)
+    #     self.sigma_ibhs[1:-1, 1:-1] = 2.0 * s * sim / (s + sim)
+    #     self.sigma_jfhs[1:-1, 1:-1] = 2.0 * s * sjp / (s + sjp)
+    #     self.sigma_jbhs[1:-1, 1:-1] = 2.0 * s * sjm / (s + sjm)
 
-        # denominator
-        self.sigma_deno = (
-            self.sigma_ifhs
-            + self.sigma_ibhs
-            + self.sigma_jfhs
-            + self.sigma_jbhs
-        )
+    #     # denominator
+    #     self.sigma_deno = (
+    #         self.sigma_ifhs
+    #         + self.sigma_ibhs
+    #         + self.sigma_jfhs
+    #         + self.sigma_jbhs
+    #     )
     
     def __genererCourant__(self, adj=False):
         for electrode in self.electrodeList:
@@ -336,7 +356,7 @@ class Sol:
         J_sigma = self.Jacobien(courantInjection)
         sigma_flat = self.matriceSigma.ravel()
         J_logsigma = J_sigma * sigma_flat[np.newaxis, :]
-        print(J_logsigma.shape)
+        # print(J_logsigma.shape)
         return J_logsigma
     
 
@@ -367,7 +387,7 @@ class Sol:
                 row[idx(j+1, i)] = 1.0
                 rows.append(row)
 
-        print(np.array(rows, dtype=np.float64).shape)
+        # print(np.array(rows, dtype=np.float64).shape)
 
         return np.array(rows, dtype=np.float64)
 
@@ -462,26 +482,58 @@ class Sol:
         return pseudo
     
 
-    def calculerInversion(self, d_obs):
+    def calculerInversion(self, d_obs, max_iter=10, lam=1.0, alpha=0.1):
+        m = np.log(self.matriceSigma.ravel())
+        L = self.construire_L()
+        LtL = L.T @ L
         
-        # Modèle initial
-        # m = np.ones((self.ny, self.nx))*np.mean(d_obs)
-        self.matricePotentiel = np.ones((self.ny, self.nx))*np.mean(d_obs)
+        for i in range(max_iter):
+            print(f"--- Itération {i+1} ---")
+            
+            # Forward & Residual
+            d_pred = self.calculerPseudoSection(courantInjection=1.0)
+            residual = d_pred - d_obs
+            rms = np.sqrt(np.mean(residual**2))
+            print(f"RMS Error: {rms:.4f}")
+            
+            if np.isnan(rms):
+                print("Erreur : RMS est NaN. L'inversion a divergé.")
+                break
 
-        max_iter = 100000
-        # for iter in range(max_iter):
-        self.calculerPotentiel()
-        data_pred = self.calculerResApparente(1.0)
+            # Jacobien
+            J = self.Jacobien_logsigma(courantInjection=1.0)
+            
+            # Construction du système
+            lhs = J.T @ J + lam * LtL
+            rhs = J.T @ residual
+            
+            # Résolution robuste
+            try:
+                # Utilise une petite stabilisation (Damping) sur la diagonale
+                lhs += 1e-5 * np.eye(lhs.shape[0]) 
+                dm, _, _, _ = np.linalg.lstsq(lhs, rhs, rcond=1e-10)
+                
+                # EMPECHER LE DM D'ETRE TROP GROS (Clipping)
+                # On limite la variation du log-sigma à +/- 0.5 par itération
+                dm = np.clip(dm, -0.5, 0.5)
+                
+            except Exception as e:
+                print(f"Erreur résolution : {e}")
+                break
 
-        print(d_obs.shape)
-        print(data_pred.shape)
-
-        # residual = data_pred - d_obs
+            # Mise à jour avec relaxation
+            m = m + alpha * dm
+            
+            # Conversion et mise à jour des paramètres physiques
+            new_sigma = np.exp(m).reshape((self.ny, self.nx))
+            
+            # Sécurité supplémentaire : on borne la conductivité
+            # (Ex: entre 1e-6 et 1 S/m) pour éviter les valeurs absurdes
+            self.matriceSigma = np.clip(new_sigma, 1e-7, 1.0)
+            
+            self.__genererSigma__()
 
         
-
-
-
 
     def __genererPositionsABMN__(self):
         listeA = []
