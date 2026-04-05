@@ -113,7 +113,7 @@ class Sol:
         self.matriceSigma = np.ones((self.ny,self.nx))* 1/250
         # self.matriceSigma[:90,:] =1/50
         yy, xx = np.meshgrid(np.arange(self.ny), np.arange(self.nx), indexing='ij')
-        self.matriceSigma[(yy-90)**2 + (xx-30)**2 <= 5**2] = 1/1000
+        self.matriceSigma[(yy-(self.ny-10))**2 + (xx-40)**2 <= 5**2] = 1/1000
 
        
         self.matriceSigma[-1,:] = 0
@@ -162,8 +162,13 @@ class Sol:
         plt.show()
 
     def afficherPotentielImSHOW(self):
-        plt.figure()
-        plt.imshow(self.matricePotentiel, origin='lower')
+        fig, ax = plt.subplots(figsize=(10, 8))
+        im = ax.imshow(self.matricePotentiel, origin='lower', cmap='viridis')
+        plt.colorbar(im, ax=ax, label='Potentiel (V)')
+        ax.set_xlabel('X')
+        ax.set_ylabel('Y')
+        # ax.set_title('Potentiel')
+        plt.tight_layout()
         plt.show()
 
     def placerElectrode(self, posX, posY, courant):
@@ -229,7 +234,7 @@ class Sol:
         self.__genererCourant__()
         self.calculerPotentiel()
         
-        dV = self.matricePotentiel[98, M] - self.matricePotentiel[98, N]
+        dV = self.matricePotentiel[self.ny-2, M] - self.matricePotentiel[self.ny-2, N]
 
         AB = abs(b - a)
         AB_2 = AB / 2
@@ -239,11 +244,6 @@ class Sol:
         AN = abs(N - a)
         BN = abs(N - b)
 
-        # K = 2 * np.pi/((1/AM-1/AN)-(1/BM-1/BN))
-
-
-        # En 2d, la formule de la résistivité apparente pour un 
-        # montage de Schlumberger est donnée par  selon chatGPT:
         K_2D = np.pi / np.log((AN * BM) / (AM * BN)) 
         rho = K_2D * dV / (courantInjection) 
 
@@ -268,13 +268,18 @@ class Sol:
         plt.xlabel("Demi-distance entre les électrodes [m]")
         plt.show()
 
-    def calculerPseudoSection(self, courantInjection):
-        coord_abmn = self.__genererPositionsABMN__()
+    def calculerPseudoSection(self, courantInjection, pas = 1):
+        coord_abmn = self.__genererPositionsABMN__(pas)
         
         listeRho = []
         listeZ = []
         listeX = []
-        for (a, b, M, N) in coord_abmn:
+
+        # optimisation : (mettre les electrodes les plus similaires proches pour accelerer les calculs    )
+
+        longueur = len(coord_abmn)
+        for i, (a, b, M, N) in enumerate(coord_abmn):
+            print(f"Pourcentage de calcul de la pseudo-section: {i/longueur*100:.2f} %", end="\r")
             rho, ab2 = self.__calculerUnAB__(a, b, M, N, courantInjection)
             listeRho.append(rho)
             listeZ.append(ab2)
@@ -284,12 +289,11 @@ class Sol:
         self.listeZ = np.array(listeZ)
         self.listeX = np.array(listeX)
 
-    def __genererPositionsABMN__(self):
+    def __genererPositionsABMN__(self, pas):
         listeA = []
         listeB = []
         listeM = []
         listeN = []
-        pas = 6
 
         A_ini = 2
         M_ini = 4
@@ -312,8 +316,8 @@ class Sol:
         return list(zip(listeA, listeB, listeM, listeN))
     
     def afficherPseudoSection(self):
-        xi = np.linspace(self.listeX.min(), self.listeX.max(), 200)
-        zi = np.linspace(self.listeZ.min(), self.listeZ.max(), 200)
+        xi = np.linspace(self.listeX.min(), self.listeX.max(), self.nx)
+        zi = np.linspace(self.listeZ.min(), self.listeZ.max(), self.nx//2)
 
         XI, ZI = np.meshgrid(xi, zi)
 
@@ -331,8 +335,8 @@ class Sol:
         plt.title("Pseudo-section de résistivité apparente")
         plt.show()
 
-    def inversion(self):
-        coord_abmn = self.__genererPositionsABMN__()
+    def inversion(self, pas):
+        coord_abmn = self.__genererPositionsABMN__(pas)
 
 
         data = pg.DataContainerERT()
@@ -362,12 +366,10 @@ class Sol:
         self.inverted_y = y
         self.inverted_res = model_vals
 
-    
-    
     def afficherInversion(self):
         
-        xi = np.linspace(min(self.inverted_x), max(self.inverted_x), 200)
-        yi = np.linspace(min(self.inverted_y), max(self.inverted_y), 100)
+        xi = np.linspace(min(self.inverted_x), max(self.inverted_x), self.nx)
+        yi = np.linspace(min(self.inverted_y), max(self.inverted_y), self.nx//2)
         xi, yi = np.meshgrid(xi, yi)
 
         zi = griddata((self.inverted_x, self.inverted_y), self.inverted_res, (xi, yi), method='cubic')
