@@ -5,7 +5,10 @@ from scipy.interpolate import griddata
 import pygimli as pg
 from pygimli.physics import ert
 
+#Décorateur numba permettant d'optimiser la vitesse des calculs
 @numba.njit(fastmath=True, parallel=True)
+
+
 def rb_gauss_seidel(
     V,
     sigma_ifhs, sigma_ibhs,
@@ -14,20 +17,45 @@ def rb_gauss_seidel(
     I,
     h
 ):
+    """
+    Solveur numérique de l'équation de poisson avec la méthode
+    de Red-Black Gauss-Seidel.
 
+    Entrants:
+            - V : Matrice du potentiel électrique
+            - sigma_ifhs : Demi-pas de conductivité i vers la droite
+            - sigma_ibhs : Demi-pas de conductivité i vers la gauche
+            - sigma_jfhs : Demi-pas de conductivité j vers le haut
+            - sigma_jbhs : Demi-pas de conductivité j vers le bas
+            - sigma_deno : Somme de tout les demis-pas
+            - I : Matrice des sources de courant
+            - h : Pas de la grille
+
+    Sorties:
+            - rms : L'erreur RMS de l'itération courante
+    """
+
+    #Taille de la grille
     ny, nx = V.shape
+
+    #Pas au carré
     h2 = h * h 
 
+    #Initialisation de l'erreur des noeuds rouges
     err_red = 0.0
 
     for j in numba.prange(1, ny-1):
+        
+        #Initialisation d'une variable d'accumulation
         tmp = 0.0
         start_i = 1 + (j % 2)
 
+        #Sélection des noeuds rouges
         for i in range(start_i, nx-1, 2):
 
             v_old = V[j, i]
 
+            #Calcul du nouveau potentiel
             new_val = (
                 I[j, i] * h2
                 + sigma_ifhs[j, i] * V[j, i+1]
@@ -38,14 +66,16 @@ def rb_gauss_seidel(
 
             V[j, i] = new_val
 
+            #Calcul de l'erreur
             d = new_val - v_old
             tmp += d * d
 
         err_red += tmp
 
-
+    #Initialisation des noeuds noirs
     err_black = 0.0
 
+    #Sélection des noeuds noirs
     for j in numba.prange(1, ny-1):
         tmp = 0.0
         start_i = 1 + ((j + 1) % 2)
@@ -53,7 +83,8 @@ def rb_gauss_seidel(
         for i in range(start_i, nx-1, 2):
 
             v_old = V[j, i]
-
+            
+            #Calcul du nouveau potentiel
             new_val = (
                 I[j, i] 
                 + sigma_ifhs[j, i] * V[j, i+1]
@@ -64,24 +95,28 @@ def rb_gauss_seidel(
 
             V[j, i] = new_val
 
+            #Calcul de l'erreur 
             d = new_val - v_old
             tmp += d * d
 
         err_black += tmp
 
-    # =========================
-    # Boundaries (no prange)
-    # =========================
+
+    #Conditions limites
+
+    #Gradient nul sur les bords
     for i in range(nx):
         V[0, i] = V[1, i]
         V[ny-1, i] = 0.0
 
+    #Potentiel nul en bas
     for j in range(ny):
         V[j, 0] = V[j, 1]
         V[j, nx-1] = V[j, nx-2]
 
-
-    return np.sqrt(err_red + err_black)
+    #Calcul de l'erreur RMS
+    rms = np.sqrt(err_red + err_black)
+    return rms
 
 
 class Sol:
