@@ -334,11 +334,11 @@ class Sol:
         RHOI = griddata((self.listeX, self.listeZ), self.listePseudoSection, (XI, ZI), method='cubic')
         
         fontsize = 15
-        fig, ax = plt.subplots(figsize=(10, 8))
+        fig, ax = plt.subplots(figsize=(12, 8))
         contourf = ax.contourf(XI, ZI, RHOI, levels=100, cmap=cmap)
         plt.gca().invert_yaxis()  # profondeur vers le bas
         # points de mesure (optionnel mais pro)
-        ax.scatter(self.listeX, self.listeZ, c='k', s=10)
+        ax.scatter(self.listeX, self.listeZ, s=10, color='white', edgecolors='black', label='Points de mesure')
         
         plt.subplots_adjust(top=0.9, bottom=0.1, left=0.1, right=0.9)
         divider = make_axes_locatable(ax)
@@ -395,7 +395,7 @@ class Sol:
         zi = griddata((self.inverted_x, self.inverted_y), self.inverted_res, (xi, yi), method='cubic')
 
         fontsize = 15
-        fig, ax = plt.subplots(figsize=(10, 8))
+        fig, ax = plt.subplots(figsize=(12, 8))
         cntr = ax.contourf(xi, yi, zi, levels=100, cmap=cmap)
         # plt.gca().invert_yaxis()
         plt.subplots_adjust(top=0.9, bottom=0.1, left=0.1, right=0.9)
@@ -410,6 +410,67 @@ class Sol:
         ax.tick_params(axis='y', labelsize=fontsize)
         ax.set_xlabel("Distance (m)", fontsize=fontsize)
         ax.set_ylabel("Profondeur (m)", fontsize=fontsize)
+        plt.show()
+
+
+    def afficherSimulationComplete(self):
+        fontsize = 13
+        fig = plt.figure(figsize=(22, 14))
+        plt.subplots_adjust(top=0.92, bottom=0.08, left=0.08, right=0.92, hspace=0.4, wspace=0.35)
+
+        # Sigma takes the full top row
+        ax1 = fig.add_subplot(2, 1, 1)
+        # Pseudo-section and Inversion share the bottom row
+        ax2 = fig.add_subplot(2, 2, 3)
+        ax3 = fig.add_subplot(2, 2, 4)
+
+        def add_colorbar(fig, ax, mappable, label):
+            divider = make_axes_locatable(ax)
+            cax = divider.append_axes("top", size="2%", pad=0.1)
+            cbar = fig.colorbar(mappable, cax=cax, orientation='horizontal', pad=0.05)
+            cbar.ax.xaxis.set_ticks_position('top')
+            cbar.ax.xaxis.set_label_position('top')
+            cbar.set_label(label, fontsize=fontsize)
+            cbar.ax.tick_params(axis='x', labelsize=fontsize)
+            return cbar
+
+        def style_ax(ax, xlabel, ylabel, title):
+            ax.tick_params(axis='x', labelsize=fontsize)
+            ax.tick_params(axis='y', labelsize=fontsize)
+            ax.set_xlabel(xlabel, fontsize=fontsize)
+            ax.set_ylabel(ylabel, fontsize=fontsize)
+            # Place label in figure coordinates above the axes, after colorbar is appended
+            ax.annotate(title, xy=(0.5, 1.2), xycoords='axes fraction',
+                        fontsize=fontsize + 1, fontweight='bold', ha='left', va='bottom')
+
+        # --- a) Sigma (full top row) ---
+        im_sigma = ax1.imshow(1/self.matriceSigma, origin='lower', cmap=cmap)
+        ax1.invert_yaxis()
+        add_colorbar(fig, ax1, im_sigma, "Résistivité ($\\Omega m$)")
+        style_ax(ax1, "Position X (m)", "Profondeur (m)", "a)")
+
+        # --- b) Pseudo-section (bottom-left) ---
+        xi2 = np.linspace(self.listeX.min(), self.listeX.max(), self.nx)
+        zi2 = np.linspace(self.listeZ.min(), self.listeZ.max(), self.nx // 2)
+        XI, ZI = np.meshgrid(xi2, zi2)
+        RHOI = griddata((self.listeX, self.listeZ), self.listePseudoSection, (XI, ZI), method='cubic')
+        contourf_ps = ax2.contourf(XI, ZI, RHOI, levels=100, cmap=cmap)
+        ax2.invert_yaxis()
+        ax2.scatter(self.listeX, self.listeZ, s=10, color='white', edgecolors='black', label='Points de mesure')
+        add_colorbar(fig, ax2, contourf_ps, "Résistivité apparente ($\\Omega m$)")
+        style_ax(ax2, "Position X (m)", "Profondeur Apparente (AB/2) (m)", "b)")
+
+        # --- c) Inversion (bottom-right) ---
+        self.inverted_y = np.abs(self.inverted_y)
+        xi = np.linspace(min(self.inverted_x), max(self.inverted_x), self.nx)
+        yi = np.linspace(min(self.inverted_y), max(self.inverted_y), self.nx // 2)
+        xi, yi = np.meshgrid(xi, yi)
+        zi = griddata((self.inverted_x, self.inverted_y), self.inverted_res, (xi, yi), method='cubic')
+        cntr = ax3.contourf(xi, yi, zi, levels=100, cmap=cmap)
+        ax3.invert_yaxis()
+        add_colorbar(fig, ax3, cntr, "Résistivité ($\\Omega m$)")
+        style_ax(ax3, "Distance (m)", "Profondeur (m)", "c)")
+
         plt.show()
 
         
