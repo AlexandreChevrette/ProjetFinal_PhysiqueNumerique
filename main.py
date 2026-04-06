@@ -2,17 +2,18 @@ from utils import *
   
 taille = 100 # 100x100m pas utilisé en ce moment
 
-nx = 100
-ny = 50
+nx = 200
+ny = 100
 
 sol = Sol((taille,taille),(nx,ny))
 
 densiteCourant = 0.01
 
-sol.placerElectrode(46, ny-2, densiteCourant)
-sol.placerElectrode(54, ny-2, -densiteCourant)
+sol.placerElectrode(46, 1, densiteCourant)
+sol.placerElectrode(54, 1, -densiteCourant)
 sol.afficherSigma()
 sol.calculerPotentiel()
+sol.afficherCourant()
 sol.afficherPotentielImSHOW()
 
 # sol.placerElectrodeMesure(49, 98)
@@ -20,8 +21,8 @@ sol.afficherPotentielImSHOW()
 # sol.calculerResApparente(1)
 # sol.afficherResistanceApparente()
 
-# pas = 2
-# sol.calculerPseudoSection(1, pas)
-# sol.afficherPseudoSection()
-# sol.inversion(pas)
-# sol.afficherInversion()
+pas = 2
+sol.calculerPseudoSection(1, pas)
+sol.afficherPseudoSection()
+sol.inversion(pas)
+sol.afficherInversion()

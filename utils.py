@@ -4,6 +4,7 @@ import numba
 from scipy.interpolate import griddata
 import pygimli as pg
 from pygimli.physics import ert
+from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 @numba.njit(fastmath=True, parallel=True)
 def rb_gauss_seidel(
@@ -69,12 +70,10 @@ def rb_gauss_seidel(
 
         err_black += tmp
 
-    # =========================
-    # Boundaries (no prange)
-    # =========================
+    # Conditions frontières
     for i in range(nx):
-        V[0, i] = V[1, i]
-        V[ny-1, i] = 0.0
+        V[0, i] = 0.0
+        V[ny-1, i] = V[ny-2, i]
 
     for j in range(ny):
         V[j, 0] = V[j, 1]
@@ -83,6 +82,7 @@ def rb_gauss_seidel(
 
     return np.sqrt(err_red + err_black)
 
+cmap = "copper"
 
 class Sol:
     def __init__(self, tailles: tuple[float, float], nxy : tuple[int, int]):
@@ -113,10 +113,10 @@ class Sol:
         self.matriceSigma = np.ones((self.ny,self.nx))* 1/250
         # self.matriceSigma[:90,:] =1/50
         yy, xx = np.meshgrid(np.arange(self.ny), np.arange(self.nx), indexing='ij')
-        self.matriceSigma[(yy-(self.ny-10))**2 + (xx-40)**2 <= 5**2] = 1/1000
+        self.matriceSigma[(yy-10)**2 + (xx-(self.nx//2))**2 <= 5**2] = 1/1000
 
        
-        self.matriceSigma[-1,:] = 0
+        self.matriceSigma[0,:] = 0
 
         # center
         s = self.matriceSigma[1:-1, 1:-1]
@@ -145,31 +145,39 @@ class Sol:
         for electrode in self.electrodeList:
             self.matriceCourant[electrode.posY, electrode.posX] = electrode.courant
         
-    def afficherSigma(self):
-        plt.figure()
-        plt.imshow(self.matriceSigma, origin='lower')
+    def __afficher__image__(self, matrice, label):
+        fontsize = 15
+        fig, ax = plt.subplots(figsize=(10, 8))
+        im = ax.imshow(matrice, origin='lower', cmap=cmap)
+        plt.gca().invert_yaxis()
+        # plt.tight_layout()
+        plt.subplots_adjust(top=0.9, bottom=0.1, left=0.1, right=0.9)
+        divider = make_axes_locatable(ax)
+        cax = divider.append_axes("top", size="2%", pad=0.1)  # 5% thickness, 0.1 pad
+        cbar = plt.colorbar(im, cax=cax, orientation='horizontal', pad = 0.05)
+        cbar.ax.xaxis.set_ticks_position('top')
+        cbar.ax.xaxis.set_label_position('top')
+        cbar.set_label(label, fontsize=fontsize)
+        cbar.ax.tick_params(axis='x', labelsize=fontsize)
+        ax.tick_params(axis='x', labelsize=fontsize)
+        ax.tick_params(axis='y', labelsize=fontsize)
+        ax.set_xlabel('Position X (m)', fontsize=fontsize)
+        ax.set_ylabel('Profondeur (m)', fontsize=fontsize)
         plt.show()
 
+    def afficherSigma(self):
+        self.__afficher__image__(self.matriceSigma, "Conductivité (S/m)")
+
     def afficherCourant(self):
-        plt.figure()
-        plt.imshow(self.matriceCourant, origin='lower')
-        plt.show()
-    
+        self.__afficher__image__(self.matriceCourant, "Courant (A)")
+
     def afficherPotentiel(self):
         plt.figure()
         plt.contour(self.matricePotentiel, levels=500)
-        plt.colorbar()
         plt.show()
-
+    
     def afficherPotentielImSHOW(self):
-        fig, ax = plt.subplots(figsize=(10, 8))
-        im = ax.imshow(self.matricePotentiel, origin='lower', cmap='viridis')
-        plt.colorbar(im, ax=ax, label='Potentiel (V)')
-        ax.set_xlabel('X')
-        ax.set_ylabel('Y')
-        # ax.set_title('Potentiel')
-        plt.tight_layout()
-        plt.show()
+        self.__afficher__image__(self.matricePotentiel, "Potentiel (V)")
 
     def placerElectrode(self, posX, posY, courant):
         self.electrodeList = np.append(self.electrodeList, Electrode(posX,posY,courant))
@@ -229,12 +237,12 @@ class Sol:
         # self.matricePotentiel = np.zeros((self.ny,self.nx))
         self.enleverElectrodes()
 
-        self.placerElectrode(a, self.ny-2, courantInjection)
-        self.placerElectrode(b, self.ny-2, -courantInjection)
+        self.placerElectrode(a, 1, courantInjection)
+        self.placerElectrode(b, 1, -courantInjection)
         self.__genererCourant__()
         self.calculerPotentiel()
         
-        dV = self.matricePotentiel[self.ny-2, M] - self.matricePotentiel[self.ny-2, N]
+        dV = self.matricePotentiel[1, M] - self.matricePotentiel[1, N]
 
         AB = abs(b - a)
         AB_2 = AB / 2
@@ -264,8 +272,9 @@ class Sol:
     def afficherResistanceApparente(self):
         plt.figure()
         plt.plot(self.listeAB2, self.listeResistanceApparente)
-        plt.ylabel(r"Résistivité apparente [$\Omega$m]")
-        plt.xlabel("Demi-distance entre les électrodes [m]")
+        plt.ylabel(r"Résistivité apparente ($\Omega$m)")
+        plt.xlabel("Demi-distance entre les électrodes (m)")
+        plt.gca().invert_yaxis()
         plt.show()
 
     def calculerPseudoSection(self, courantInjection, pas = 1):
@@ -295,16 +304,16 @@ class Sol:
         listeM = []
         listeN = []
 
-        A_ini = 2
-        M_ini = 4
-        N_ini = 6
-        B_ini = 8
-        for i in range((self.nx-B_ini)//(2*pas)):
+        A_ini = 2 + self.nx//4 
+        M_ini = 4 + self.nx//4
+        N_ini = 6 + self.nx//4
+        B_ini = 8 + self.nx//4
+        for i in range((self.nx//2-B_ini)//(2*pas)):
             A = A_ini
             M = M_ini + i*pas
             N = N_ini + i*pas
             B = B_ini + 2*i*pas
-            while (B < self.nx): 
+            while (B < self.nx/4*3): 
                 listeA.append(A)
                 listeB.append(B)
                 listeM.append(M)
@@ -323,16 +332,27 @@ class Sol:
 
         # interpolation
         RHOI = griddata((self.listeX, self.listeZ), self.listePseudoSection, (XI, ZI), method='cubic')
-        plt.figure()
-        contourf = plt.contourf(XI, ZI, RHOI, levels=50)
+        
+        fontsize = 15
+        fig, ax = plt.subplots(figsize=(10, 8))
+        contourf = ax.contourf(XI, ZI, RHOI, levels=100, cmap=cmap)
         plt.gca().invert_yaxis()  # profondeur vers le bas
         # points de mesure (optionnel mais pro)
-        plt.scatter(self.listeX, self.listeZ, c='k', s=10)
+        ax.scatter(self.listeX, self.listeZ, c='k', s=10)
         
-        plt.colorbar(contourf, label=r"Résistivité apparente [$\Omega$m]")
-        plt.xlabel("Position X [m]")
-        plt.ylabel("Profondeur Apparente (AB/2) [m]")
-        plt.title("Pseudo-section de résistivité apparente")
+        plt.subplots_adjust(top=0.9, bottom=0.1, left=0.1, right=0.9)
+        divider = make_axes_locatable(ax)
+        cax = divider.append_axes("top", size="2%", pad=0.1)
+        cbar = plt.colorbar(contourf, cax=cax, orientation='horizontal', pad=0.05)
+        cbar.ax.xaxis.set_ticks_position('top')
+        cbar.ax.xaxis.set_label_position('top')
+        cbar.set_label("Résistivité apparente ($\\Omega m$)", fontsize=fontsize)
+        cbar.ax.tick_params(axis='x', labelsize=fontsize)
+        ax.tick_params(axis='x', labelsize=fontsize)
+        ax.tick_params(axis='y', labelsize=fontsize)
+        ax.set_xlabel("Position X [m]", fontsize=fontsize)
+        ax.set_ylabel("Profondeur Apparente (AB/2) [m]", fontsize=fontsize)
+        
         plt.show()
 
     def inversion(self, pas):
@@ -374,13 +394,22 @@ class Sol:
 
         zi = griddata((self.inverted_x, self.inverted_y), self.inverted_res, (xi, yi), method='cubic')
 
-        plt.figure(figsize=(12, 5))
-        cntr = plt.contourf(xi, yi, zi, levels=100, cmap="Spectral_r")
-        plt.colorbar(cntr, label="Résistivité ($\\Omega m$)")
-
-        plt.xlabel("Distance (m)")
-        plt.ylabel("Profondeur (m)")
-        plt.title("Coupe de Résistivité Inversée")
+        fontsize = 15
+        fig, ax = plt.subplots(figsize=(10, 8))
+        cntr = ax.contourf(xi, yi, zi, levels=100, cmap=cmap)
+        # plt.gca().invert_yaxis()
+        plt.subplots_adjust(top=0.9, bottom=0.1, left=0.1, right=0.9)
+        divider = make_axes_locatable(ax)
+        cax = divider.append_axes("top", size="2%", pad=0.1)
+        cbar = plt.colorbar(cntr, cax=cax, orientation='horizontal', pad=0.05)
+        cbar.ax.xaxis.set_ticks_position('top')
+        cbar.ax.xaxis.set_label_position('top')
+        cbar.set_label("Résistivité ($\\Omega m$)", fontsize=fontsize)
+        cbar.ax.tick_params(axis='x', labelsize=fontsize)
+        ax.tick_params(axis='x', labelsize=fontsize)
+        ax.tick_params(axis='y', labelsize=fontsize)
+        ax.set_xlabel("Distance (m)", fontsize=fontsize)
+        ax.set_ylabel("Profondeur (m)", fontsize=fontsize)
         plt.show()
 
         
