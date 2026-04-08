@@ -27,6 +27,11 @@ sol.afficherResistanceApparente()
 sol.calculerPseudoSection(1)
 sol.afficherPseudoSection()
 
+# sol.enregistrerData()
+# sol.inversion()
+# sol.afficherInversion()
+
+
 # 1. Générer des données synthétiques (modèle vrai inclus dans initialiserModele)
 d_obs = sol.calculerPseudoSection(courantInjection=1.0)
 

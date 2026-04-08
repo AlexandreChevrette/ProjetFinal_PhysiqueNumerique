@@ -4,8 +4,8 @@ import numba
 from scipy.interpolate import griddata
 import pandas as pd
 import os
-# import pygimli as pg
-# from pygimli.physics import ert
+import pygimli as pg
+from pygimli.physics import ert
 
 @numba.njit(fastmath=True, parallel=True)
 def rb_gauss_seidel(
@@ -612,7 +612,7 @@ class Sol:
         plt.title("Pseudo-section de résistivité apparente")
         plt.show()
 
-    def enregistrerData(self, PATH, name):
+    def enregistrerData(self):#, PATH, name):
         coord_abmn = self.__genererPositionsABMN__()
         # Les coordonnées des électrodes A, B, M et N doivent être en indice
         # pour l'inversion, donc j'ai fait commencer les position à 0, 1, 2, ...
@@ -620,7 +620,7 @@ class Sol:
         B = [(b[1]//2)-1 for b in coord_abmn]
         M = [(m[2]//2)-1 for m in coord_abmn]
         N = [(n[3]//2)-1 for n in coord_abmn]
-        data_sensors = {
+        self.data_measures = {
             'ax': A, 'ay':np.zeros(len(A)),
             'bx': B, 'by':np.zeros(len(B)),
             'mx': M, 'my':np.zeros(len(M)),
@@ -628,24 +628,25 @@ class Sol:
             'rho': self.listePseudoSection,
         }
         
-        data_measures = {
+        self.data_sensors = {
             'x': np.arange(2, self.nx, 2), 
             'y': np.zeros(len(np.arange(2, self.nx, 2)))
         }
 
-        df_sensors = pd.DataFrame(data_sensors)
-        df_measures = pd.DataFrame(data_measures)
+        # df_sensors = pd.DataFrame(data_sensors)
+        # df_measures = pd.DataFrame(data_measures)
 
-        with pd.ExcelWriter(os.path.join(PATH, name)) as writer:
-            df_sensors.to_excel(writer, sheet_name="Sensors", index=False)
-            df_measures.to_excel(writer, sheet_name="Measurements", index=False)
+        # with pd.ExcelWriter(os.path.join(PATH, name)) as writer:
+        #     df_sensors.to_excel(writer, sheet_name="Sensors", index=False)
+        #     df_measures.to_excel(writer, sheet_name="Measurements", index=False)
 
-        print(f"Enregistrement effectué à la destination {os.path.join(PATH, name)}")
+        # print(f"Enregistrement effectué à la destination {os.path.join(PATH, name)}")
 
 
-    def inversion(self, PATH):
-        df_sensors = pd.read_excel(PATH, sheet_name="Sensors")
-        df_measure = pd.read_excel(PATH, sheet_name="Measurements")
+    def inversion(self):#, PATH):
+        df_sensors = pd.DataFrame(self.data_sensors)#pd.read_excel(PATH, sheet_name="Sensors")
+        df_measure = pd.DataFrame(self.data_measures)#pd.read_excel(PATH, sheet_name="Measurements")
+        
 
         data = pg.DataContainerERT()
 
