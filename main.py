@@ -27,20 +27,32 @@ sol.afficherResistanceApparente()
 sol.calculerPseudoSection(1)
 sol.afficherPseudoSection()
 
-# ... tes réglages avec l'anomalie ...
-d_obs = sol.calculerPseudoSection(1) # Voici tes données "terrain"
+# 1. Générer des données synthétiques (modèle vrai inclus dans initialiserModele)
+d_obs = sol.calculerPseudoSection(courantInjection=1.0)
 
-# --- 2. Préparation de l'inversion (Le point de départ de l'IA) ---
-# On "efface" l'anomalie pour voir si l'inversion peut la retrouver
-sol.matriceSigma = np.ones((dim, dim)) * (1/5000) 
-sol.__genererSigma__() # On recalcule les coefficients pour ce sol homogène
+# 2. Réinitialiser vers un modèle homogène avant l'inversion
+sol.matriceSigma = np.ones((sol.ny, sol.nx)) * np.mean(sol.matriceSigma)
+sol.__genererSigma__()
 
-# --- 3. Lancement de l'inversion ---
-sol.calculerInversion(d_obs, max_iter=10, lam=100, alpha=0.1)
-sol.afficherSigma() # Devrait montrer l'anomalie reconstruite
+# 3. Inverser
+history = sol.calculerInversion(
+    d_obs        = d_obs,
+    max_iter     = 8,
+    lam          = 2.0,          # plus conservateur
+    tol_rms      = 1e-3,
+    lam_schedule = lambda it, lam: max(lam * 0.9, 0.1)
+)
 
+# 4. Visualiser la convergence
+import matplotlib.pyplot as plt
+plt.semilogy(history["rms"], 'o-')
+plt.xlabel("Itération"); plt.ylabel("RMS"); plt.title("Convergence"); plt.show()
 
-# sol.enregistrerData(PATH, 'test_3.xlsx')
+# 5. Visualiser le modèle inversé
+plt.figure()
+plt.imshow(1.0 / sol.matriceSigma, origin='lower', cmap='jet_r')
+plt.colorbar(label="Résistivité (Ω·m)")
+plt.title("Modèle inversé"); plt.show()
 
 
 ## optmisations faites:

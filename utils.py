@@ -156,40 +156,6 @@ class Sol:
         self.sigma_deno = (self.sigma_ifhs + self.sigma_ibhs + 
                            self.sigma_jfhs + self.sigma_jbhs)
         
-
-    # def __genererSigma__(self):
-    #     # voir les sources et changer le setting de resistivité
-    #     # self.matriceSigma = np.random.uniform(low=1, high=10, size=(self.ny, self.nx))
-    #     self.matriceSigma = np.ones((self.ny,self.nx))* 1/5000
-    #     # self.matriceSigma[:90,:] =1/50
-    #     yy, xx = np.meshgrid(np.arange(self.ny), np.arange(self.nx), indexing='ij')
-    #     self.matriceSigma[(yy-90)**2 + (xx-30)**2 <= 5**2] = 1/1000
-
-       
-    #     self.matriceSigma[-1,:] = 0
-
-    #     # center
-    #     s = self.matriceSigma[1:-1, 1:-1]
-
-    #     # neighbors
-    #     sip = self.matriceSigma[1:-1, 2:]   # i+1
-    #     sim = self.matriceSigma[1:-1, :-2]  # i-1
-    #     sjp = self.matriceSigma[2:, 1:-1]   # j+1
-    #     sjm = self.matriceSigma[:-2, 1:-1]  # j-1
-
-    #     # harmonic means
-    #     self.sigma_ifhs[1:-1, 1:-1] = 2.0 * s * sip / (s + sip)
-    #     self.sigma_ibhs[1:-1, 1:-1] = 2.0 * s * sim / (s + sim)
-    #     self.sigma_jfhs[1:-1, 1:-1] = 2.0 * s * sjp / (s + sjp)
-    #     self.sigma_jbhs[1:-1, 1:-1] = 2.0 * s * sjm / (s + sjm)
-
-    #     # denominator
-    #     self.sigma_deno = (
-    #         self.sigma_ifhs
-    #         + self.sigma_ibhs
-    #         + self.sigma_jfhs
-    #         + self.sigma_jbhs
-    #     )
     
     def __genererCourant__(self, adj=False):
         for electrode in self.electrodeList:
@@ -482,56 +448,120 @@ class Sol:
         return pseudo
     
 
-    def calculerInversion(self, d_obs, max_iter=10, lam=1.0, alpha=0.1):
-        m = np.log(self.matriceSigma.ravel())
-        L = self.construire_L()
+    def calculerInversion(self, d_obs, max_iter=15, lam=1.0,
+                      tol_rms=1e-3, lam_schedule=None):
+
+        m   = np.log(self.matriceSigma.ravel())
+        d_obs = np.asarray(d_obs, dtype=np.float64)
+        L   = self.construire_L()
         LtL = L.T @ L
-        
-        for i in range(max_iter):
-            print(f"--- Itération {i+1} ---")
-            
-            # Forward & Residual
-            d_pred = self.calculerPseudoSection(courantInjection=1.0)
-            residual = d_pred - d_obs
-            rms = np.sqrt(np.mean(residual**2))
-            print(f"RMS Error: {rms:.4f}")
-            
-            if np.isnan(rms):
-                print("Erreur : RMS est NaN. L'inversion a divergé.")
-                break
+        history = {"rms": [], "lam": [], "alpha": []}
+        coord_abmn = self.__genererPositionsABMN__()
 
-            # Jacobien
-            J = self.Jacobien_logsigma(courantInjection=1.0)
-            
-            # Construction du système
-            lhs = J.T @ J + lam * LtL
-            rhs = J.T @ residual
-            
-            # Résolution robuste
-            try:
-                # Utilise une petite stabilisation (Damping) sur la diagonale
-                lhs += 1e-5 * np.eye(lhs.shape[0]) 
-                dm, _, _, _ = np.linalg.lstsq(lhs, rhs, rcond=1e-10)
-                
-                # EMPECHER LE DM D'ETRE TROP GROS (Clipping)
-                # On limite la variation du log-sigma à +/- 0.5 par itération
-                dm = np.clip(dm, -0.5, 0.5)
-                
-            except Exception as e:
-                print(f"Erreur résolution : {e}")
-                break
-
-            # Mise à jour avec relaxation
-            m = m + alpha * dm
-            
-            # Conversion et mise à jour des paramètres physiques
-            new_sigma = np.exp(m).reshape((self.ny, self.nx))
-            
-            # Sécurité supplémentaire : on borne la conductivité
-            # (Ex: entre 1e-6 et 1 S/m) pour éviter les valeurs absurdes
-            self.matriceSigma = np.clip(new_sigma, 1e-7, 1.0)
-            
+        for it in range(max_iter):
+            # ---- 1. Modèle courant ----
+            self.matriceSigma = np.exp(m).reshape(self.ny, self.nx)
             self.__genererSigma__()
+
+            # ---- 2. Données simulées + RMS ----
+            d_pred   = self._forward_from_current_model(coord_abmn)
+            residual = d_obs - d_pred
+            rms      = np.sqrt(np.mean(residual**2))
+            history["rms"].append(rms)
+            history["lam"].append(lam)
+            print(f"Iter {it+1:2d} | RMS = {rms:.6f} | λ = {lam:.4g}")
+
+            if np.isnan(rms):
+                print("  → NaN détecté, arrêt.")
+                break
+            if rms < tol_rms:
+                print("  → Convergé.")
+                break
+
+            # ---- 3. Jacobienne ----
+            J   = self.Jacobien_logsigma(courantInjection=1.0)
+            JtJ = J.T @ J
+            Jtr = J.T @ residual
+
+            # ---- 4. Système normal ----
+            A  = JtJ + lam * LtL + 1e-6 * np.diag(np.diag(JtJ))
+            try:
+                from scipy.linalg import solve
+                dm = solve(A, Jtr, assume_a='sym')
+            except Exception:
+                dm, *_ = np.linalg.lstsq(A, Jtr, rcond=None)
+
+            dm = np.clip(dm, -1.0, 1.0)
+
+            # ---- 5. Line search ----
+            alpha, m, rms_new = self._line_search(
+                m, dm, d_obs, coord_abmn,
+                rms_current=rms,
+                alpha_init=1.0,
+                beta=0.5,
+                max_ls=8
+            )
+            history["alpha"].append(alpha)
+            print(f"         α = {alpha:.4f} | RMS après step = {rms_new:.6f}")
+
+            # ---- 6. Schedule λ ----
+            if lam_schedule is not None:
+                lam = lam_schedule(it, lam)
+
+        self.matriceSigma = np.exp(m).reshape(self.ny, self.nx)
+        self.__genererSigma__()
+        return history
+    
+
+    def _line_search(self, m_current, dm, d_obs, coord_abmn,
+                 rms_current, alpha_init=1.0, beta=0.5, max_ls=10):
+        """
+        Backtracking line search (critère d'Armijo).
+        Réduit alpha par facteur beta jusqu'à ce que le RMS diminue.
+        """
+        alpha = alpha_init
+        for _ in range(max_ls):
+            m_trial = np.clip(m_current + alpha * dm,
+                            np.log(1e-6), np.log(1.0))
+
+            # Appliquer le modèle candidat
+            self.matriceSigma = np.exp(m_trial).reshape(self.ny, self.nx)
+            self.__genererSigma__()
+
+            d_trial = self._forward_from_current_model(coord_abmn)
+            rms_trial = np.sqrt(np.mean((d_obs - d_trial)**2))
+
+            if rms_trial < rms_current:        # amélioration trouvée
+                return alpha, m_trial, rms_trial
+
+            alpha *= beta                      # réduire le pas
+
+        # Aucune amélioration : on retourne le plus petit pas essayé
+        return alpha, m_current + alpha * dm, rms_current
+
+
+    def _forward_from_current_model(self, coord_abmn, courantInjection=1.0):
+        """
+        Calcule les résistivités apparentes simulées pour toutes les configs ABMN
+        SANS écraser self.matricePotentiel ni self.electrodeList.
+        """
+        d_pred = np.zeros(len(coord_abmn))
+        for k, (a, b, M, N) in enumerate(coord_abmn):
+            I = self.creer_source(
+                pos_plus =(self.ny-2, a),
+                pos_minus=(self.ny-2, b),
+                amplitude=courantInjection
+            )
+            V = self.resoudre_potentiel(I)
+
+            dV = V[self.ny-2, M] - V[self.ny-2, N]
+
+            AM = abs(M - a); AN = abs(N - a)
+            BM = abs(M - b); BN = abs(N - b)
+            K = np.pi / (np.log((AN * BM) / (AM * BN + 1e-20)) + 1e-20)
+            d_pred[k] = K * dV / courantInjection
+
+        return d_pred
 
         
 
