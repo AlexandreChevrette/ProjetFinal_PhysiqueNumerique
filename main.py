@@ -9,65 +9,79 @@ ny = 100
 sol = Sol((taille,taille),(nx,ny))
 solveur = Solveur(sol)
 vis = Visualisation(sol)
-densiteCourant = 0.01
-
+inversionPy = PyGimliInversionSolveur(sol, solveur)
+inversion = InversionSolveur(sol)
+densiteCourant = 1 
 sol.placerElectrode(46, 1, densiteCourant)
 sol.placerElectrode(54, 1, -densiteCourant)
 
 # vis.afficherSigma()
 solveur.calculerPotentiel()
-vis.afficherCourant()
-vis.afficherPotentielImSHOW()
+# vis.afficherCourant()
+# vis.afficherPotentielImSHOW()
 
-# sol.placerElectrodeMesure(49, 98)
-# sol.placerElectrodeMesure(51, 98)
-# sol.calculerResApparente(1)
-# sol.afficherResistanceApparente()
+sol.placerElectrodeMesure(49, 98)
+sol.placerElectrodeMesure(51, 98)
+# solveur.calculerResApparente(1)
+# vis.afficherResistanceApparente()
 
 
 
-# load_data = True
-# load_data = False
-# if load_data:
-#     with open('sol_data.pkl', 'rb') as f:
-#         data = pickle.load(f)
-#         sol.listeResistanceApparente = data['listeResistanceApparente']
-#         sol.listeAB2 = data['listeAB2']
-#         sol.listePseudoSection = data['listePseudoSection']
-#         sol.listeX = data['listeX']
-#         sol.listeZ = data['listeZ']
-#         sol.inverted_x = data['inverted_x']
-#         sol.inverted_y = data['inverted_y']
-#         sol.inverted_res = data['inverted_res']
-# 
-#     sol.afficherSimulationComplete()
-# else:
-#     pas = 2
-#     sol.calculerPseudoSection(1, pas)
-#    # # ... tes réglages avec l'anomalie ...
-#    # d_obs = sol.listePseudoSection.copy() # Voici tes données "terrain"
-#    # sol.afficherPseudoSection()
-#    # 
-#    # 
-# 
-#    # # --- 2. Préparation de l'inversion (Le point de départ de l'IA) ---
-#    # # On "efface" l'anomalie pour voir si l'inversion peut la retrouver
-#    # sol.matriceSigma = np.ones((ny,nx), dtype=np.float64) * (1/2500)
-#    # sol.__genererSigma__() # On recalcule les coefficients pour ce sol homogène
-# 
-#     sol.inversionPyGimli(pas)
-#     sol.afficherInversion()
-#     sol.afficherSimulationComplete()
-# 
-#     # Save data
-#     with open('sol_data.pkl', 'wb') as f:
-#         pickle.dump({
-#             'listeResistanceApparente': sol.listeResistanceApparente,
-#             'listeAB2': sol.listeAB2,
-#             'listePseudoSection': sol.listePseudoSection,
-#             'listeX': sol.listeX,
-#             'listeZ': sol.listeZ,
-#             'inverted_x': sol.inverted_x,
-#             'inverted_y': sol.inverted_y,
-#             'inverted_res': sol.inverted_res
-#         }, f)
+load_data = True
+load_data = False
+if load_data:
+    with open('sol_data.pkl', 'rb') as f:
+        data = pickle.load(f)
+        sol.matriceSigma = data['sigma']
+        sol.listeResistanceApparente = data['listeResistanceApparente']
+        sol.listeAB2 = data['listeAB2']
+        sol.listePseudoSection = data['listePseudoSection']
+        sol.listeX = data['listeX']
+        sol.listeZ = data['listeZ']
+        sol.inversionX = data['inversionX']
+        sol.inversionY = data['inversionY']
+        sol.inversionRes = data['inversionRes']
+
+    vis.afficherSimulationComplete()
+else:
+    
+   # with open('sol_data.pkl', 'rb') as f:
+   #     data = pickle.load(f)
+   #     sol.matriceSigma = data['sigma']
+   #     sol.listeResistanceApparente = data['listeResistanceApparente']
+   #     sol.listeAB2 = data['listeAB2']
+   #     sol.listePseudoSection = data['listePseudoSection']
+   #     sol.listeX = data['listeX']
+   #     sol.listeZ = data['listeZ']
+   #     sol.inversionX = data['inversionX']
+   #     sol.inversionY = data['inversionY']
+   #     sol.inversionRes = data['inversionRes']
+    pas = 6
+    solveur.calculerPseudoSection(1, pas)
+
+    # inversionPy.inversionPyGimli(pas)
+    inversion.calculerInversion(pas)
+    matriceSigmaInversee = inversion.obtenirResultatsInversion()
+    matriceSigmaInversee = matriceSigmaInversee[1:,:]
+    # 5. Visualiser le modèle inversé
+    plt.figure()
+    plt.imshow(1.0 / matriceSigmaInversee, origin='lower', cmap='jet_r')
+    plt.colorbar(label="Résistivité (Ω·m)")
+    plt.title("Modèle inversé"); plt.show()
+
+    vis.afficherInversion()
+    vis.afficherSimulationComplete()
+
+    # Save data
+    with open('sol_data.pkl', 'wb') as f:
+        pickle.dump({
+            'sigma': sol.matriceSigma,
+            'listeResistanceApparente': sol.listeResistanceApparente,
+            'listeAB2': sol.listeAB2,
+            'listePseudoSection': sol.listePseudoSection,
+            'listeX': sol.listeX,
+            'listeZ': sol.listeZ,
+            'inversionX': sol.inversionX,
+            'inversionY': sol.inversionY,
+            'inversionRes': sol.inversionRes
+        }, f)

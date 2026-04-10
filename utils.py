@@ -5,6 +5,7 @@ from scipy.interpolate import griddata
 import pygimli as pg
 from pygimli.physics import ert
 from mpl_toolkits.axes_grid1 import make_axes_locatable
+from scipy.sparse.linalg import cg
 
 @numba.njit(fastmath=True, parallel=True)
 def rb_gauss_seidel(
@@ -98,7 +99,6 @@ class Sol:
         self.sigma_deno = np.zeros((self.ny,self.nx))
         self.matricePotentiel = np.zeros((self.ny,self.nx)) 
         self.matriceCourant = np.zeros((self.ny,self.nx)) 
-        self.__genererSigma__()
         self.electrodeList = np.array([])
         self.electrodeMesuresList = np.array([])
         self.listeResistanceApparente = np.array([])
@@ -106,24 +106,18 @@ class Sol:
         self.listeX = np.array([])
         self.listeZ = np.array([])
         self.listePseudoSection = np.array([])
-        self.initialiserModele()
-
-    def initialiserModele(self):
-        """
-        Create initial conductivity model only once.
-        """
+        self.__genererSigma__()
+        self.__genererCoefficients__()
+        
+    def __genererSigma__(self):
         self.matriceSigma = np.ones((self.ny, self.nx), dtype=np.float64) * (1/250)
 
         yy, xx = np.meshgrid(np.arange(self.ny), np.arange(self.nx), indexing='ij')
         self.matriceSigma[(yy-10)**2 + (xx-(self.nx//2))**2 <= 5**2] = 1/1000
 
-        # bottom boundary
         self.matriceSigma[0, :] = 1e-12
 
-        self.__genererSigma__()
-
-    def __genererSigma__(self):
-        # On ne touche plus à self.matriceSigma ici ! 
+    def __genererCoefficients__(self):
         # On calcule seulement les coefficients pour le solveur
         s = self.matriceSigma[1:-1, 1:-1]
         sip = self.matriceSigma[1:-1, 2:]
@@ -152,30 +146,6 @@ class Sol:
 
     def enleverElectrodes(self):
         self.electrodeList = np.array([])
-        listeA = []
-        listeB = []
-        listeM = []
-        listeN = []
-
-        A_ini = 2 + self.nx//4 
-        M_ini = 4 + self.nx//4
-        N_ini = 6 + self.nx//4
-        B_ini = 8 + self.nx//4
-        for i in range((self.nx//2-B_ini)//(2*pas)):
-            A = A_ini
-            M = M_ini + i*pas
-            N = N_ini + i*pas
-            B = B_ini + 2*i*pas
-            while (B < self.nx/4*3): 
-                listeA.append(A)
-                listeB.append(B)
-                listeM.append(M)
-                listeN.append(N)
-                A += pas
-                M += pas 
-                N += pas
-                B += pas
-        return list(zip(listeA, listeB, listeM, listeN))
 
 class Solveur:
     def __init__(self, sol : Sol):
@@ -205,10 +175,10 @@ class Solveur:
             erreur = rb_gauss_seidel(V, sigma_ifhs,sigma_ibhs,sigma_jfhs,sigma_jbhs,sigma_deno, I, h)
 
             it += 1  
-            print(f"Erreur: {erreur}")
+            # print(f"Erreur: {erreur}")
 
     def calculerResApparente(self, courantInjection):
-        if (len(self.electrodeMesuresList) != 2):
+        if (len(self.sol.electrodeMesuresList) != 2):
             print("Seulement deux sondes de mesures doivent être utilisés pour calculer la resistance apparente")
             return
         
@@ -217,7 +187,7 @@ class Solveur:
         coord_ab = self.__genererPositionsAB__(M, N)
         
         
-        isteRho = []
+        listeRho = []
         listeAB2 = []
         for (a, b) in coord_ab:
             rho, ab2 = self.__calculerUnAB__(a, b, M.posX, N.posX, courantInjection)
@@ -230,11 +200,11 @@ class Solveur:
     def __calculerUnAB__(self, a, b, M, N, courantInjection):
         self.sol.matriceCourant = np.zeros((self.sol.ny,self.sol.nx))
         # self.sol.matricePotentiel = np.zeros((self.sol.ny,self.sol.nx))
-        self.enleverElectrodes()
+        self.sol.enleverElectrodes()
 
-        self.placerElectrode(a, 1, courantInjection)
-        self.placerElectrode(b, 1, -courantInjection)
-        self.__genererCourant__()
+        self.sol.placerElectrode(a, 1, courantInjection)
+        self.sol.placerElectrode(b, 1, -courantInjection)
+        self.sol.__genererCourant__()
         self.calculerPotentiel()
         
         dV = self.sol.matricePotentiel[1, M] - self.sol.matricePotentiel[1, N]
@@ -257,7 +227,7 @@ class Solveur:
         listeB = []
         A = M.posX - 1
         B = N.posX + 1
-        while (A >= 4 and B < self.nx-4):
+        while (A >= 4 and B < self.sol.nx-4):
             listeA.append(A)
             listeB.append(B)
             A -= 1
@@ -296,12 +266,12 @@ class Solveur:
         M_ini = 4
         N_ini = 6
         B_ini = 8
-        for i in range((self.nx-B_ini)//(2*pas)):
+        for i in range((self.sol.nx-B_ini)//(2*pas)):
             A = A_ini
             M = M_ini + i*pas
             N = N_ini + i*pas
             B = B_ini + 2*i*pas
-            while (B < self.nx): 
+            while (B < self.sol.nx): 
                 listeA.append(A)
                 listeB.append(B)
                 listeM.append(M)
@@ -323,7 +293,7 @@ class PyGimliInversionSolveur:
 
         data = pg.DataContainerERT()
 
-        for i in range(self.nx):
+        for i in range(self.sol.nx):
             data.createSensor([i, 0, 0])
 
         for i, (A, B, M, N) in enumerate(coord_abmn):
@@ -344,17 +314,24 @@ class PyGimliInversionSolveur:
         x = [c.x() for c in parad.cellCenters()]
         y = [c.y() for c in parad.cellCenters()]
 
-        self.sol.inverted_x = x
-        self.sol.inverted_y = y
-        self.sol.inverted_res = model_vals
+        self.sol.inversionX = x
+        self.sol.inversionY = y
+        self.sol.inversionRes = model_vals
 
 class InversionSolveur:
-    def __init__(self, sol : Sol, solverDirect : Solveur):
-        self.sol = sol
-        self.solverDirect = solverDirect
+    def __init__(self, sol : Sol):
+        self.solRef = sol
+        self.solSolutionne = Sol((self.solRef.tailleX, self.solRef.tailleY), (self.solRef.nx, self.solRef.ny))
+        self.solverDirect = Solveur(self.solSolutionne)
 
-    def calculerInversion(self, d_obs, pas, max_iter=10, lam=1.0, alpha=0.1):
-        m = np.log(self.matriceSigma.ravel())
+    def obtenirResultatsInversion(self):
+        return self.solSolutionne.matriceSigma
+
+    def calculerInversion(self, pas, max_iter=10, lam=1.0, alpha=0.1):
+        d_obs = self.solRef.listePseudoSection.copy() # données "terrain"
+        self.solSolutionne.matriceSigma = np.ones((self.solSolutionne.ny, self.solSolutionne.nx), dtype=np.float64) * (1/2500)
+
+        m = np.log(self.solSolutionne.matriceSigma.ravel())
         L = self.construire_L()
         LtL = L.T @ L
         
@@ -362,10 +339,11 @@ class InversionSolveur:
             print(f"--- Itération {i+1} ---")
             
             # Forward & Residual
-            self.calculerPseudoSection(courantInjection=1.0, pas=pas)
-            d_pred = self.listePseudoSection.copy()
+            self.solverDirect.calculerPseudoSection(courantInjection=1.0, pas=pas)
+            d_pred = self.solSolutionne.listePseudoSection.copy()
             residual = d_pred - d_obs
             rms = np.sqrt(np.mean(residual**2))
+            
             print(f"RMS Error: {rms:.4f}")
             
             if np.isnan(rms):
@@ -374,36 +352,31 @@ class InversionSolveur:
 
             # Jacobien
             J = self.Jacobien_logsigma(pas, courantInjection=1.0)
-            
+            print("apres jacobien log simga")
             # Construction du système
             lhs = J.T @ J + lam * LtL
             rhs = J.T @ residual
-            
+            print("apres construction systeme") 
             # Résolution robuste
             try:
-                # Utilise une petite stabilisation (Damping) sur la diagonale
-                lhs += 1e-5 * np.eye(lhs.shape[0]) 
-                dm, _, _, _ = np.linalg.lstsq(lhs, rhs, rcond=1e-10)
-                
-                # EMPECHER LE DM D'ETRE TROP GROS (Clipping)
-                # On limite la variation du log-sigma à +/- 0.5 par itération
+                dm, _ = cg(lhs, rhs, maxiter=1000)
                 dm = np.clip(dm, -0.5, 0.5)
-                
+
             except Exception as e:
                 print(f"Erreur résolution : {e}")
                 break
-
+            print("apres resolution systeme")
             # Mise à jour avec relaxation
             m = m + alpha * dm
             
             # Conversion et mise à jour des paramètres physiques
-            new_sigma = np.exp(m).reshape((self.ny, self.nx))
+            new_sigma = np.exp(m).reshape((self.solSolutionne.ny, self.solSolutionne.nx))
             
             # Sécurité supplémentaire : on borne la conductivité
             # (Ex: entre 1e-6 et 1 S/m) pour éviter les valeurs absurdes
-            self.matriceSigma = np.clip(new_sigma, 1e-7, 1.0)
+            self.solSolutionne.matriceSigma = np.clip(new_sigma, 1e-7, 1.0)
             
-            self.__genererSigma__()
+            self.solSolutionne.__genererCoefficients__()
 
     def retrosubstitution(A, b): # Pour résoudre un système Ax=b
         m, n = A.shape
@@ -421,12 +394,14 @@ class InversionSolveur:
         Create source matrix I with +amplitude at pos_plus and -amplitude at pos_minus.
         pos_plus and pos_minus are tuples (y, x)
         """
-        I = np.zeros((self.ny, self.nx), dtype=np.float64)
+        I = np.zeros((self.solSolutionne.ny, self.solSolutionne.nx), dtype=np.float64)
         I[pos_plus[0], pos_plus[1]] = amplitude
         I[pos_minus[0], pos_minus[1]] = -amplitude
         return I
     
     def gradient_central(self, V, h=1.0):
+
+        print("Calcul du gradient central...")
         dVdx = np.zeros_like(V)
         dVdy = np.zeros_like(V)
 
@@ -442,9 +417,10 @@ class InversionSolveur:
         return dVdx, dVdy
 
     def Jacobien(self, pas, courantInjection=1.0):
-        coord_abmn = self.__genererPositionsABMN__(pas)
+        print("Calcul du Jacobien...")
+        coord_abmn = self.solverDirect.__genererPositionsABMN__(pas)
         nb_config = len(coord_abmn)
-        nb_cells = self.nx*self.ny
+        nb_cells = self.solSolutionne.nx * self.solSolutionne.ny
         # Jacobien de la position et jacobien de la conductivité concaténé
         # Comment un petit changement de position change le voltage
         # Comment un petit changement de conductivité change le voltage
@@ -463,8 +439,8 @@ class InversionSolveur:
                 pos_minus=(0, b),
                 amplitude=courantInjection
             )
-            self.calculerPotentiel(I = I_fwd)
-            V_fwd = self.matricePotentiel.copy()
+            self.solverDirect.calculerPotentiel(I = I_fwd)
+            V_fwd = self.solSolutionne.matricePotentiel.copy()
 
             # -----------------------------
             # 2) Adjoint solve (M,N)
@@ -477,8 +453,8 @@ class InversionSolveur:
                 amplitude=1.0
             )
 
-            self.calculerPotentiel(I = I_adj)
-            V_adj = self.matricePotentiel.copy()
+            self.solverDirect.calculerPotentiel(I = I_adj)
+            V_adj = self.solSolutionne.matricePotentiel.copy()
             
 
             # -----------------------------
@@ -500,8 +476,9 @@ class InversionSolveur:
         """
         Jacobian wrt m = log(sigma)
         """
+        print("Calcul du Jacobien par rapport à log(sigma)...")
         J_sigma = self.Jacobien(pas, courantInjection)
-        sigma_flat = self.matriceSigma.ravel()
+        sigma_flat = self.solSolutionne.matriceSigma.ravel()
         J_logsigma = J_sigma * sigma_flat[np.newaxis, :]
         # print(J_logsigma.shape)
         return J_logsigma
@@ -511,23 +488,24 @@ class InversionSolveur:
         Build first-order smoothness matrix L such that Lm penalizes differences
         between neighboring cells.
         """
-        n = self.ny * self.nx
+        print("Construction de la matrice de lissage L...")
+        n = self.solSolutionne.ny * self.solSolutionne.nx
         rows = []
 
         def idx(j, i):
-            return j * self.nx + i
+            return j * self.solSolutionne.nx + i
 
         # horizontal differences
-        for j in range(1, self.ny-1):
-            for i in range(1, self.nx-2):
+        for j in range(1, self.solSolutionne.ny-1):
+            for i in range(1, self.solSolutionne.nx-2):
                 row = np.zeros(n)
                 row[idx(j, i)] = -1.0
                 row[idx(j, i+1)] = 1.0
                 rows.append(row)
 
         # vertical differences
-        for j in range(1, self.ny-2):
-            for i in range(1, self.nx-1):
+        for j in range(1, self.solSolutionne.ny-2):
+            for i in range(1, self.solSolutionne.nx-1):
                 row = np.zeros(n)
                 row[idx(j, i)] = -1.0
                 row[idx(j+1, i)] = 1.0
@@ -632,7 +610,10 @@ class Visualisation:
                         fontsize=fontsize + 1, fontweight='bold', ha='left', va='bottom')
 
         # --- a) Sigma (full top row) ---
-        im_sigma = ax1.imshow(1/self.matriceSigma, origin='lower', cmap=cmap)
+        matriceSigma = self.sol.matriceSigma.copy()
+        matriceSigma = matriceSigma[1:,:] 
+
+        im_sigma = ax1.imshow(1/matriceSigma, origin='lower', cmap=cmap)
         ax1.invert_yaxis()
         add_colorbar(fig, ax1, im_sigma, "Résistivité ($\\Omega m$)")
         style_ax(ax1, "Position X (m)", "Profondeur (m)", "a)")
