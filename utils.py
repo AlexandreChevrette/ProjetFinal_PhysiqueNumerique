@@ -21,6 +21,7 @@ def rb_gauss_seidel(
     h2 = h * h 
 
     err_red = 0.0
+    max_rel_err = 0.0
 
     for j in numba.prange(1, ny-1):
         tmp = 0.0
@@ -42,6 +43,10 @@ def rb_gauss_seidel(
 
             d = new_val - v_old
             tmp += d * d
+            
+            if abs(new_val) > 1e-12:
+                rel_err = abs(d) / abs(new_val)
+                max_rel_err = max(max_rel_err, rel_err)
 
         err_red += tmp
 
@@ -68,6 +73,10 @@ def rb_gauss_seidel(
 
             d = new_val - v_old
             tmp += d * d
+            
+            if abs(new_val) > 1e-12:
+                rel_err = abs(d) / abs(new_val)
+                max_rel_err = max(max_rel_err, rel_err)
 
         err_black += tmp
 
@@ -80,8 +89,7 @@ def rb_gauss_seidel(
         V[j, 0] = V[j, 1]
         V[j, nx-1] = V[j, nx-2]
 
-
-    return np.sqrt(err_red + err_black)
+    return max_rel_err
 
 cmap = "copper"
 
@@ -112,8 +120,10 @@ class Sol:
     def __genererSigma__(self):
         self.matriceSigma = np.ones((self.ny, self.nx), dtype=np.float64) * (1/250)
 
-        yy, xx = np.meshgrid(np.arange(self.ny), np.arange(self.nx), indexing='ij')
-        self.matriceSigma[(yy-10)**2 + (xx-(self.nx//2))**2 <= 5**2] = 1/1000
+        self.matriceSigma[10:,:] = 1/50
+
+        # yy, xx = np.meshgrid(np.arange(self.ny), np.arange(self.nx), indexing='ij')
+        # self.matriceSigma[(yy-20)**2 + (xx-(self.nx//2))**2 <= 10**2] = 1/1000
 
         self.matriceSigma[0, :] = 1e-12
 
@@ -329,7 +339,7 @@ class InversionSolveur:
 
     def calculerInversion(self, pas, max_iter=10, lam=1.0, alpha=0.1):
         d_obs = self.solRef.listePseudoSection.copy() # données "terrain"
-        self.solSolutionne.matriceSigma = np.ones((self.solSolutionne.ny, self.solSolutionne.nx), dtype=np.float64) * (1/2500)
+        self.solSolutionne.matriceSigma = np.ones((self.solSolutionne.ny, self.solSolutionne.nx), dtype=np.float64) * (1/250)
 
         m = np.log(self.solSolutionne.matriceSigma.ravel())
         L = self.construire_L()
@@ -546,8 +556,41 @@ class Visualisation:
         self.__afficherImage__(self.sol.matriceCourant, "Courant (A)")
 
     def afficherPotentiel(self):
-        plt.figure()
-        plt.contour(self.sol.matricePotentiel, levels=500)
+        V  = self.sol.matricePotentiel.copy()
+        # V = np.flipud(V)  
+
+        dVy, dVx = np.gradient(V)
+        Jx = -dVx
+        Jy = -dVy
+
+        x, y = np.meshgrid(np.arange(self.sol.nx), np.arange(self.sol.ny))
+
+        fontsize = 25
+        fig, ax = plt.subplots(figsize=(10, 8))
+
+        im = plt.imshow(V, origin='lower', extent=[0, self.sol.nx, 0, self.sol.ny], aspect='equal', cmap=cmap)
+
+        plt.streamplot(x, y, Jx, Jy, color='white')
+
+        plt.xlim(0, self.sol.nx-1)
+        plt.ylim(0, self.sol.ny-1)
+        
+        
+        # plt.tight_layout()
+        plt.subplots_adjust(top=0.9, bottom=0.1, left=0.1, right=0.9)
+        divider = make_axes_locatable(ax)
+        cax = divider.append_axes("top", size="2%", pad=0.1)  # 5% thickness, 0.1 pad
+        cbar = plt.colorbar(im, cax=cax, orientation='horizontal', pad = 0.05)
+        cbar.ax.xaxis.set_ticks_position('top')
+        cbar.ax.xaxis.set_label_position('top')
+        cbar.set_label("Potentiel (V)", fontsize=fontsize)
+        cbar.ax.tick_params(axis='x', labelsize=fontsize)
+        ax.tick_params(axis='x', labelsize=fontsize)
+        ax.tick_params(axis='y', labelsize=fontsize)
+        ax.invert_yaxis()
+        ax.set_xlabel('Position X (m)', fontsize=fontsize)
+        ax.set_ylabel('Profondeur (m)', fontsize=fontsize)
+        
         plt.show()
     
     def afficherPotentielImSHOW(self):
@@ -643,11 +686,19 @@ class Visualisation:
         plt.show()
     
     def afficherResistanceApparente(self):
-        plt.figure()
-        plt.plot(self.sol.listeAB2, self.sol.listeResistanceApparente)
-        plt.ylabel(r"Résistivité apparente ($\Omega$m)")
-        plt.xlabel("Demi-distance entre les électrodes (m)")
+        fontsize = 20
+        linewidth = 4
+        
+        plt.figure(figsize=(10, 6))
+        plt.scatter(self.sol.listeAB2, self.sol.listeResistanceApparente, 
+               s=50, color='steelblue', edgecolors='black', linewidth=1)
+        plt.ylabel(r"Résistivité apparente ($\Omega$m)", fontsize=fontsize)
+        plt.xlabel("Demi-distance entre les électrodes (m)", fontsize=fontsize)
+        plt.tick_params(axis='x', labelsize=fontsize)
+        plt.tick_params(axis='y', labelsize=fontsize)
+        plt.grid(True, alpha=0.3)
         plt.gca().invert_yaxis()
+        plt.tight_layout()
         plt.show()
 
     def afficherPseudoSection(self):
