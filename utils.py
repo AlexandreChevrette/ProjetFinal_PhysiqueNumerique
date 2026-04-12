@@ -120,10 +120,10 @@ class Sol:
     def __genererSigma__(self):
         self.matriceSigma = np.ones((self.ny, self.nx), dtype=np.float64) * (1/250)
 
-        self.matriceSigma[10:,:] = 1/50
+        self.matriceSigma[21:,:] = 1/50
 
         # yy, xx = np.meshgrid(np.arange(self.ny), np.arange(self.nx), indexing='ij')
-        # self.matriceSigma[(yy-20)**2 + (xx-(self.nx//2))**2 <= 10**2] = 1/1000
+        # self.matriceSigma[(yy-10)**2 + (xx-(self.nx//2))**2 <= 5**2] = 1/1000
 
         self.matriceSigma[0, :] = 1e-12
 
@@ -166,11 +166,11 @@ class Solveur:
         # voir sources
 
         it=0
-        tol = 1e-2
+        tol = 1e-3
         h = 1
         erreur = 1
         niter= 1000000
-        V = self.sol.matricePotentiel #reference
+        V = self.sol.matricePotentiel.copy()
         self.sol.__genererCourant__()
         if I is None:
             I = self.sol.matriceCourant.copy()
@@ -186,6 +186,8 @@ class Solveur:
 
             it += 1  
             # print(f"Erreur: {erreur}")
+        
+        self.sol.matricePotentiel = V.copy()
 
     def calculerResApparente(self, courantInjection):
         if (len(self.sol.electrodeMesuresList) != 2):
@@ -270,18 +272,18 @@ class Solveur:
         listeB = []
         listeM = []
         listeN = []
-        pas = 6
+        offset = 0
 
-        A_ini = 2
-        M_ini = 4
-        N_ini = 6
-        B_ini = 8
+        A_ini = 2 + offset
+        M_ini = 4 + offset
+        N_ini = 6 + offset
+        B_ini = 8 + offset
         for i in range((self.sol.nx-B_ini)//(2*pas)):
             A = A_ini
             M = M_ini + i*pas
             N = N_ini + i*pas
             B = B_ini + 2*i*pas
-            while (B < self.sol.nx): 
+            while (B < (self.sol.nx-offset)): 
                 listeA.append(A)
                 listeB.append(B)
                 listeM.append(M)

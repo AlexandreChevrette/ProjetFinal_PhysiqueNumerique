@@ -12,13 +12,13 @@ from utils import *
 
 taille = 100 # 100x100m pas utilisé en ce moment
 
-nx = 100
-ny = 50
+nx = 200
+ny = 100
 
 sol = Sol((taille,taille),(nx,ny))
 solveur = Solveur(sol)
 vis = Visualisation(sol)
-densiteCourant = 0.01
+densiteCourant =1
 sol.placerElectrodeMesure(49, 1)
 sol.placerElectrodeMesure(51, 1)
 solveur.calculerResApparente(densiteCourant)
