@@ -35,22 +35,20 @@ sol.afficherPseudoSection()
 # 1. Générer des données synthétiques (modèle vrai inclus dans initialiserModele)
 d_obs = sol.calculerPseudoSection(courantInjection=1.0)
 
-# 2. Réinitialiser vers un modèle homogène avant l'inversion
-sol.matriceSigma = np.ones((sol.ny, sol.nx)) * np.mean(sol.matriceSigma)
+# Réinitialiser vers modèle homogène
+sol.matriceSigma = np.ones((sol.ny, sol.nx)) * (1/5000)
 sol.__genererSigma__()
 
-# 3. Inverser
 history = sol.calculerInversion(
-    d_obs        = d_obs,
-    max_iter     = 8,
-    lam          = 2.0,          # plus conservateur
-    tol_rms      = 1e-3,
-    lam_schedule = lambda it, lam: max(lam * 0.9, 0.1)
+    d_obs    = d_obs,
+    max_iter = 10,
+    eps      = 1e-6,
+    lam      = 0.05     # plus faible qu'avant car la normalisation aide déjà
 )
 
 # 4. Visualiser la convergence
 import matplotlib.pyplot as plt
-plt.semilogy(history["rms"], 'o-')
+plt.semilogy(history["misfit"], 'o-')
 plt.xlabel("Itération"); plt.ylabel("RMS"); plt.title("Convergence"); plt.show()
 
 # 5. Visualiser le modèle inversé

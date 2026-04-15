@@ -448,66 +448,185 @@ class Sol:
         return pseudo
     
 
-    def calculerInversion(self, d_obs, max_iter=15, lam=1.0,
-                      tol_rms=1e-3, lam_schedule=None):
+    # def calculerInversion(self, d_obs, max_iter=15, lam=1.0,
+    #                   tol_rms=1e-3, lam_schedule=None):
 
-        m   = np.log(self.matriceSigma.ravel())
+    #     m   = np.log(self.matriceSigma.ravel())
+    #     d_obs = np.asarray(d_obs, dtype=np.float64)
+    #     L   = self.construire_L()
+    #     LtL = L.T @ L
+    #     history = {"rms": [], "lam": [], "alpha": []}
+    #     coord_abmn = self.__genererPositionsABMN__()
+
+    #     for it in range(max_iter):
+    #         # ---- 1. Modèle courant ----
+    #         self.matriceSigma = np.exp(m).reshape(self.ny, self.nx)
+    #         self.__genererSigma__()
+
+    #         # ---- 2. Données simulées + RMS ----
+    #         d_pred   = self._forward_from_current_model(coord_abmn)
+    #         residual = d_obs - d_pred
+    #         rms      = np.sqrt(np.mean(residual**2))
+    #         history["rms"].append(rms)
+    #         history["lam"].append(lam)
+    #         print(f"Iter {it+1:2d} | RMS = {rms:.6f} | λ = {lam:.4g}")
+
+    #         if np.isnan(rms):
+    #             print("  → NaN détecté, arrêt.")
+    #             break
+    #         if rms < tol_rms:
+    #             print("  → Convergé.")
+    #             break
+
+    #         # ---- 3. Jacobienne ----
+    #         J   = self.Jacobien_logsigma(courantInjection=1.0)
+    #         JtJ = J.T @ J
+    #         Jtr = J.T @ residual
+
+    #         # ---- 4. Système normal ----
+    #         A  = JtJ + lam * LtL + 1e-6 * np.diag(np.diag(JtJ))
+    #         try:
+    #             from scipy.linalg import solve
+    #             dm = solve(A, Jtr, assume_a='sym')
+    #         except Exception:
+    #             dm, *_ = np.linalg.lstsq(A, Jtr, rcond=None)
+
+    #         dm = np.clip(dm, -1.0, 1.0)
+
+    #         # ---- 5. Line search ----
+    #         alpha, m, rms_new = self._line_search(
+    #             m, dm, d_obs, coord_abmn,
+    #             rms_current=rms,
+    #             alpha_init=1.0,
+    #             beta=0.5,
+    #             max_ls=8
+    #         )
+    #         history["alpha"].append(alpha)
+    #         print(f"         α = {alpha:.4f} | RMS après step = {rms_new:.6f}")
+
+    #         # ---- 6. Schedule λ ----
+    #         if lam_schedule is not None:
+    #             lam = lam_schedule(it, lam)
+
+    #     self.matriceSigma = np.exp(m).reshape(self.ny, self.nx)
+    #     self.__genererSigma__()
+    #     return history
+
+    def calculerInversion(self, d_obs, max_iter=100, eps=1e-8, lam=0.1):
+        """
+        Inversion Gauss-Newton avec SVD tronquée (inspiré de Giroux geo1302).
+
+        Parameters
+        ----------
+        d_obs    : résistivités apparentes observées (même ordre que ABMN)
+        max_iter : nombre max d'itérations
+        eps      : critère d'arrêt  |misfit1 - misfit2| / misfit1 < eps
+        lam      : poids de la régularisation Tikhonov (matrice L)
+        """
+        m = np.log(self.matriceSigma.ravel())
         d_obs = np.asarray(d_obs, dtype=np.float64)
+
         L   = self.construire_L()
         LtL = L.T @ L
-        history = {"rms": [], "lam": [], "alpha": []}
-        coord_abmn = self.__genererPositionsABMN__()
 
-        for it in range(max_iter):
-            # ---- 1. Modèle courant ----
+        coord_abmn = self.__genererPositionsABMN__()
+        history = {"misfit": [], "rank": []}
+
+        for iteration in range(max_iter):
+
+            # ---- 1. Données simulées au modèle courant ----
             self.matriceSigma = np.exp(m).reshape(self.ny, self.nx)
             self.__genererSigma__()
+            d_pred = self._forward_from_current_model(coord_abmn)
 
-            # ---- 2. Données simulées + RMS ----
-            d_pred   = self._forward_from_current_model(coord_abmn)
-            residual = d_obs - d_pred
-            rms      = np.sqrt(np.mean(residual**2))
-            history["rms"].append(rms)
-            history["lam"].append(lam)
-            print(f"Iter {it+1:2d} | RMS = {rms:.6f} | λ = {lam:.4g}")
+            # ---- 2. Résidus normalisés (comme Giroux : e / rhoa_obs) ----
+            # Évite que les grandes valeurs de ρ dominent le misfit
+            e1 = (d_pred - d_obs) / (d_obs + 1e-20)
+            misfit1 = float(e1 @ e1)
+            history["misfit"].append(misfit1)
+            print(f"Iter {iteration+1:3d} | misfit = {misfit1:.6e}")
 
-            if np.isnan(rms):
-                print("  → NaN détecté, arrêt.")
-                break
-            if rms < tol_rms:
-                print("  → Convergé.")
+            if misfit1 < eps:
+                print("  → Convergé (misfit < eps).")
                 break
 
-            # ---- 3. Jacobienne ----
-            J   = self.Jacobien_logsigma(courantInjection=1.0)
-            JtJ = J.T @ J
-            Jtr = J.T @ residual
+            # ---- 3. Jacobienne normalisée (comme Giroux) ----
+            # J_norm[k,j] = (∂d_k/∂m_j) * m_j / d_obs_k
+            # → sans unités, améliore le conditionnement
+            J = self.Jacobien_logsigma(courantInjection=1.0)
+            J_norm = J / (d_obs[:, np.newaxis] + 1e-20)
 
-            # ---- 4. Système normal ----
-            A  = JtJ + lam * LtL + 1e-6 * np.diag(np.diag(JtJ))
-            try:
-                from scipy.linalg import solve
-                dm = solve(A, Jtr, assume_a='sym')
-            except Exception:
-                dm, *_ = np.linalg.lstsq(A, Jtr, rcond=None)
+            # Ajout de la régularisation dans la Jacobienne augmentée
+            # [ J_norm ]       [ e1        ]
+            # [ √λ · L ] Δm =  [ 0 ...     ]
+            sqrt_lam = np.sqrt(lam)
+            J_aug = np.vstack([J_norm, sqrt_lam * L])
+            e_aug = np.concatenate([e1, np.zeros(L.shape[0])])
 
-            dm = np.clip(dm, -1.0, 1.0)
+            # ---- 4. SVD de la Jacobienne augmentée (comme Giroux) ----
+            U, s, Vh = np.linalg.svd(J_aug, full_matrices=False)
+            V = Vh.T  # (n_cells, rank)
 
-            # ---- 5. Line search ----
-            alpha, m, rms_new = self._line_search(
-                m, dm, d_obs, coord_abmn,
-                rms_current=rms,
-                alpha_init=1.0,
-                beta=0.5,
-                max_ls=8
-            )
-            history["alpha"].append(alpha)
-            print(f"         α = {alpha:.4f} | RMS après step = {rms_new:.6f}")
+            # ---- 5. Troncature SVD adaptative (boucle de Giroux) ----
+            # On cherche le plus petit rang qui améliore le misfit
+            l = 0           # indice de troncature
+            k = 1           # compteur de tentatives
+            dm_accepted = None
 
-            # ---- 6. Schedule λ ----
-            if lam_schedule is not None:
-                lam = lam_schedule(it, lam)
+            while l < s.size:
+                # Critère de Giroux : beta = s[l]^2 / s[0]^2
+                beta = (s[l] / (s[0] + 1e-20)) ** 2
+                if beta < 1e-5:
+                    beta = 0.001 * (l + 1)
 
+                # Filtre SVD : S_ii = s_i / (s_i^2 + 1/beta)
+                # (forme de filtre de Tikhonov en espace SVD)
+                S_filt = s / (s**2 + 1.0 / (beta + 1e-20))
+
+                # Mise à jour : Δm = V · diag(S_filt) · Uᵀ · e_aug
+                dm = V @ (S_filt * (U.T @ e_aug))
+                dm = np.clip(dm, -1.0, 1.0)      # sécurité log-espace
+
+                # Tester le candidat
+                m_candidate = np.clip(m - dm, np.log(1e-6), np.log(1.0))
+                self.matriceSigma = np.exp(m_candidate).reshape(self.ny, self.nx)
+                self.__genererSigma__()
+                d_trial = self._forward_from_current_model(coord_abmn)
+
+                e2 = (d_trial - d_obs) / (d_obs + 1e-20)
+                misfit2 = float(e2 @ e2)
+
+                if misfit2 < misfit1:
+                    # Amélioration trouvée → accepter
+                    dm_accepted = dm
+                    l = s.size + 1          # sortir de la boucle
+                else:
+                    # Pas d'amélioration → tronquer davantage
+                    l += 1
+                    k += 1
+                    if k == s.size:
+                        print("  → Aucune amélioration SVD possible, arrêt.")
+                        # Restaurer le modèle précédent
+                        self.matriceSigma = np.exp(m).reshape(self.ny, self.nx)
+                        self.__genererSigma__()
+                        return history
+
+            if dm_accepted is None:
+                break
+
+            # ---- 6. Mise à jour acceptée ----
+            rank_used = k
+            history["rank"].append(rank_used)
+            m = np.clip(m - dm_accepted, np.log(1e-6), np.log(1.0))
+
+            dfit = (misfit1 - misfit2) / (misfit1 + 1e-20)
+            print(f"         rang SVD utilisé = {rank_used} | Δmisfit = {dfit:.4f}")
+
+            if dfit < eps:
+                print("  → Convergé (Δmisfit < eps).")
+                break
+
+        # Modèle final
         self.matriceSigma = np.exp(m).reshape(self.ny, self.nx)
         self.__genererSigma__()
         return history
