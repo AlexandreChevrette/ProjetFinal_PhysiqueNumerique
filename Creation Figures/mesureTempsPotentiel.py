@@ -9,12 +9,10 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 from utils import *
 
 
-taille = 100 # 100x100m pas utilisé en ce moment
-
 nx = 100
 ny = 50
 
-sol = Sol((taille,taille),(nx,ny))
+sol = Sol((nx,ny))
 solveur = Solveur(sol)
 densiteCourant = 0.01
 sol.placerElectrode(46, 1, densiteCourant)

@@ -4,13 +4,10 @@ import matplotlib.pyplot as plt
 from scipy.optimize import curve_fit
 import sys, os
 
-# ça fonctionne, mais j'ai aucune idée pourquoi
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))     
 
 from utils import *
 
-
-taille = 100 # 100x100m pas utilisé en ce moment
 
 nx = 200
 ny = 100
@@ -18,7 +15,7 @@ ny = 100
 ### mettre précision à 1e-3 pour ces calculs ###
 ################################################
 
-sol = Sol((taille,taille),(nx,ny))
+sol = Sol((nx,ny))
 solveur = Solveur(sol)
 vis = Visualisation(sol)
 densiteCourant = 1
