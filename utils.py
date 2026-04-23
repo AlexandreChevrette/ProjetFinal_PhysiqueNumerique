@@ -627,8 +627,8 @@ class InversionSolveur:
         """
         self.solRef = sol
         self.solSolutionne = Sol(
-            (self.solRef.tailleX, self.solRef.tailleY),
-            (self.solRef.nx, self.solRef.ny)
+            (self.solRef.nx, self.solRef.ny),
+            # (self.solRef.nx, self.solRef.ny)
         )
         self.solverDirect = Solveur(self.solSolutionne)
 

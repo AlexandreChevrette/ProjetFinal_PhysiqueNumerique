@@ -9,6 +9,7 @@ ny = 50
 
 sol = Sol((nx,ny))
 solveur = Solveur(sol)
+vis = Visualisation(sol)
 # vis = Visualisation(sol)
 inversionPy = PyGimliInversionSolveur(sol, solveur)
 inversion = InversionSolveur(sol)
@@ -25,5 +26,8 @@ sol.placerElectrodeMesure(49, 1)
 sol.placerElectrodeMesure(51, 1)
 solveur.calculerResApparente(1)
 vis.afficherResistanceApparente()
+
+inversionPy.inversionPyGimli(1)
+vis.afficherInversion()
 
 
