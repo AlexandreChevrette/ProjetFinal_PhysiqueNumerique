@@ -127,10 +127,10 @@ class Sol:
         """
         Create initial conductivity model only once.
         """
-        self.matriceSigma = np.ones((self.ny, self.nx), dtype=np.float64) * (1/250)
+        self.matriceSigma = np.ones((self.ny, self.nx), dtype=np.float64) * 1/250
 
         yy, xx = np.meshgrid(np.arange(self.ny), np.arange(self.nx), indexing='ij')
-        # self.matriceSigma[(yy-90)**2 + (xx-30)**2 <= 5**2] = 1/1000
+        self.matriceSigma[(yy-40)**2 + (xx-50)**2 <= 5**2] = 1/50
 
         # bottom boundary
         self.matriceSigma[-1, :] = 1e-12
@@ -809,13 +809,37 @@ class Sol:
 
         zi = griddata((self.inverted_x, self.inverted_y), self.inverted_res, (xi, yi), method='cubic')
 
-        plt.figure(figsize=(12, 5))
-        cntr = plt.contourf(xi, yi, zi, levels=100, cmap="copper")
-        plt.colorbar(cntr, label="Résistivité ($\Omega m$)")
+        # plt.figure(figsize=(12, 5))
+        # plt.colorbar(cntr, label="Résistivité ($\Omega m$)", orientation='horizontal', location='top')
 
-        plt.xlabel("Distance (m)")
+        plt.rcParams.update({
+            "font.size": 12,
+            "axes.titlesize": 12,
+            "axes.labelsize": 12
+        })
+        
+        fig, ax = plt.subplots()
+
+        cntr = ax.contourf(xi, yi, zi, levels=100, cmap="copper")
+
+        cbar = fig.colorbar(
+            cntr,
+            ax=ax,
+            orientation='horizontal',
+            location='top',
+            pad=0.05,       # espace entre plot et colorbar
+            shrink=1,      # longueur de la barre
+            aspect=50
+        )
+        cbar.set_label("Résistivité (Ωm)")
+        # récupérer les ticks actuels
+        yticks = ax.get_yticks()
+        # remplacer par leur valeur absolue
+        ax.set_yticklabels([f"{abs(y):.0f}" for y in yticks])
+
+        plt.xlabel("Position X (m)")
         plt.ylabel("Profondeur (m)")
-        plt.title("Coupe de Résistivité Inversée")
+        # plt.title("Coupe de Résistivité Inversée")
         plt.show()
 
 

@@ -5,22 +5,22 @@ dim = 100
 PATH = r"C:\Users\obour\OneDrive - Université Laval\Bureau"
 
 
-sol = Sol((taille,taille),(dim,dim))
+sol = Sol((100,50),(100,50))
 
 sol.matriceSigma = np.ones((sol.ny,sol.nx))* 1/250
 
 yy, xx = np.meshgrid(np.arange(sol.ny), np.arange(sol.nx), indexing='ij')
-sol.matriceSigma[(yy-90)**2 + (xx-50)**2 <= 5**2] = 1/50
+sol.matriceSigma[(yy-40)**2 + (xx-50)**2 <= 5**2] = 1/50
 
-sol.placerElectrode(46, 98, 1)
-sol.placerElectrode(54, 98, -1)
+sol.placerElectrode(46, 48, 1)
+sol.placerElectrode(54, 48, -1)
 sol.afficherSigma()
 sol.calculerPotentiel()
 sol.afficherPotentielImSHOW()
 
 
-sol.placerElectrodeMesure(48, 98)
-sol.placerElectrodeMesure(52, 98)
+sol.placerElectrodeMesure(48, 48)
+sol.placerElectrodeMesure(52, 48)
 sol.calculerResApparente(1)
 sol.afficherResistanceApparente()
 
@@ -28,8 +28,11 @@ sol.calculerPseudoSection(1)
 sol.afficherPseudoSection()
 
 sol.enregistrerData()
-sol.inversion(lamb=100)
-sol.afficherInversion()
+
+lam_val = [0.001, 0.01, 0.1, 1, 10, 100, 1000]
+for i in lam_val:
+    sol.inversion(lamb=i)
+    sol.afficherInversion()
 
 
 # # 1. Générer des données synthétiques (modèle vrai inclus dans initialiserModele)
