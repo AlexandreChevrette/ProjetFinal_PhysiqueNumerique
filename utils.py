@@ -127,10 +127,10 @@ class Sol:
         """
         Create initial conductivity model only once.
         """
-        self.matriceSigma = np.ones((self.ny, self.nx), dtype=np.float64) * (1/5000)
+        self.matriceSigma = np.ones((self.ny, self.nx), dtype=np.float64) * (1/250)
 
         yy, xx = np.meshgrid(np.arange(self.ny), np.arange(self.nx), indexing='ij')
-        self.matriceSigma[(yy-90)**2 + (xx-30)**2 <= 5**2] = 1/1000
+        # self.matriceSigma[(yy-90)**2 + (xx-30)**2 <= 5**2] = 1/1000
 
         # bottom boundary
         self.matriceSigma[-1, :] = 1e-12
@@ -762,7 +762,7 @@ class Sol:
         # print(f"Enregistrement effectué à la destination {os.path.join(PATH, name)}")
 
 
-    def inversion(self):#, PATH):
+    def inversion(self, lamb):#, PATH):
         df_sensors = pd.DataFrame(self.data_sensors)#pd.read_excel(PATH, sheet_name="Sensors")
         df_measure = pd.DataFrame(self.data_measures)#pd.read_excel(PATH, sheet_name="Measurements")
         
@@ -787,7 +787,7 @@ class Sol:
 
         mgr = ert.ERTManager(data)
 
-        model = mgr.invert(data=data, lam=20, verbose=True) # , mesh=mesh
+        model = mgr.invert(data=data, lam=lamb, verbose=True) # , mesh=mesh
 
         model_vals = np.array(model).tolist() 
         parad = mgr.paraDomain
@@ -810,7 +810,7 @@ class Sol:
         zi = griddata((self.inverted_x, self.inverted_y), self.inverted_res, (xi, yi), method='cubic')
 
         plt.figure(figsize=(12, 5))
-        cntr = plt.contourf(xi, yi, zi, levels=100, cmap="Spectral_r")
+        cntr = plt.contourf(xi, yi, zi, levels=100, cmap="copper")
         plt.colorbar(cntr, label="Résistivité ($\Omega m$)")
 
         plt.xlabel("Distance (m)")
