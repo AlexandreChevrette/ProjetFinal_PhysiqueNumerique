@@ -37,7 +37,8 @@ def rb_gauss_seidel(
     sigma_jfhs, sigma_jbhs,
     sigma_deno,
     I,
-    h
+    h,
+    omega = 0.0
 ):
     """
     Effectue une itération de la méthode de Gauss-Seidel rouge-noir pour résoudre
@@ -81,13 +82,13 @@ def rb_gauss_seidel(
 
             v_old = V[j, i]
 
-            new_val = (
+            new_val = (1+omega)*(
                 I[j, i] * h2
                 + sigma_ifhs[j, i] * V[j, i+1]
                 + sigma_ibhs[j, i] * V[j, i-1]
                 + sigma_jfhs[j, i] * V[j+1, i]
                 + sigma_jbhs[j, i] * V[j-1, i]
-            ) / sigma_deno[j, i]
+            ) / sigma_deno[j, i] - (omega * v_old)
 
             V[j, i] = new_val
 
@@ -111,13 +112,13 @@ def rb_gauss_seidel(
 
             v_old = V[j, i]
 
-            new_val = (
-                I[j, i] 
+            new_val = (1+omega)*(
+                I[j, i] * h2
                 + sigma_ifhs[j, i] * V[j, i+1]
                 + sigma_ibhs[j, i] * V[j, i-1]
                 + sigma_jfhs[j, i] * V[j+1, i]
                 + sigma_jbhs[j, i] * V[j-1, i]
-            ) / sigma_deno[j, i]
+            ) / sigma_deno[j, i] - (omega * v_old)
 
             V[j, i] = new_val
 
@@ -219,10 +220,10 @@ class Sol:
             directement ``self.matriceSigma`` avant d'appeler :meth:`__genererCoefficients__`.
         """
         self.matriceSigma = np.ones((self.ny, self.nx), dtype=np.float64) * (1 / 250)
-
+        self.matriceSigma[10:, :] = 1 / 50
         # Anomalie conductrice circulaire (rayon 5, centre en (nx//2, 10))
-        yy, xx = np.meshgrid(np.arange(self.ny), np.arange(self.nx), indexing='ij')
-        self.matriceSigma[(yy - 10) ** 2 + (xx - (self.nx // 2)) ** 2 <= 5 ** 2] = 1 / 50
+        # yy, xx = np.meshgrid(np.arange(self.ny), np.arange(self.nx), indexing='ij')
+        # self.matriceSigma[(yy - 10) ** 2 + (xx - (self.nx // 2)) ** 2 <= 5 ** 2] = 1 / 50
 
         # Surface quasi-isolante (condition aux limites Dirichlet V=0 en haut)
         self.matriceSigma[0, :] = 1e-12
@@ -322,7 +323,7 @@ class Solveur:
         """
         self.sol = sol
 
-    def calculerPotentiel(self, I: np.ndarray = None):
+    def calculerPotentiel(self, I: np.ndarray = None, omega: float = 0.0):
         """
         Calcule le champ de potentiel électrique par itérations de Gauss-Seidel rouge-noir.
 
@@ -352,13 +353,13 @@ class Solveur:
 
         while erreur > tol and it < niter:
             erreur = rb_gauss_seidel(
-                V, sigma_ifhs, sigma_ibhs, sigma_jfhs, sigma_jbhs, sigma_deno, I, h
+                V, sigma_ifhs, sigma_ibhs, sigma_jfhs, sigma_jbhs, sigma_deno, I, h, omega
             )
             it += 1
 
         self.sol.matricePotentiel = V.copy()
 
-    def calculerResApparente(self, courantInjection: float):
+    def calculerResApparente(self, courantInjection: float, omega: float = 0.0):
         """
         Calcule la courbe de sondage de résistivité apparente (1D, type Schlumberger).
 
@@ -386,7 +387,7 @@ class Solveur:
         listeRho = []
         listeAB2 = []
         for (a, b) in coord_ab:
-            rho, ab2 = self.__calculerUnAB__(a, b, M.posX, N.posX, courantInjection)
+            rho, ab2 = self.__calculerUnAB__(a, b, M.posX, N.posX, courantInjection, omega)
             listeRho.append(rho)
             listeAB2.append(ab2)
 
@@ -399,7 +400,8 @@ class Solveur:
         b: int,
         M: int,
         N: int,
-        courantInjection: float
+        courantInjection: float,
+        omega: float = 0.0
     ):
         """
         Calcule la résistivité apparente pour une configuration ABMN donnée.
@@ -424,7 +426,7 @@ class Solveur:
         self.sol.placerElectrode(a, 1, courantInjection)
         self.sol.placerElectrode(b, 1, -courantInjection)
         self.sol.__genererCourant__()
-        self.calculerPotentiel()
+        self.calculerPotentiel(omega=omega)
 
         dV = self.sol.matricePotentiel[1, M] - self.sol.matricePotentiel[1, N]
 

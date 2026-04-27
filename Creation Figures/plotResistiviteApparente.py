@@ -18,7 +18,7 @@ vis = Visualisation(sol)
 densiteCourant =1
 sol.placerElectrodeMesure(49, 1)
 sol.placerElectrodeMesure(51, 1)
-solveur.calculerResApparente(densiteCourant)
+solveur.calculerResApparente(densiteCourant, omega=0.0)
 # vis.afficherResistanceApparente()
 
 
