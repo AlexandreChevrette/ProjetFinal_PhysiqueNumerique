@@ -9,7 +9,7 @@ ny = 50
 
 sol = Sol((nx,ny))
 solveur = Solveur(sol)
-# vis = Visualisation(sol)
+vis = Visualisation(sol)
 inversionPy = PyGimliInversionSolveur(sol, solveur)
 inversion = InversionSolveur(sol)
 densiteCourant = 0.01
@@ -18,7 +18,7 @@ sol.placerElectrode(54, 1, -densiteCourant)
 
 vis.afficherSigma()
 solveur.calculerPotentiel()
-# vis.afficherCourant()
+vis.afficherCourant()
 vis.afficherPotentiel()
 
 sol.placerElectrodeMesure(49, 1)
